@@ -1,0 +1,9 @@
+{
+  "device-mode": "cuda",
+  "models-dir": "/workspace/YiFan/SpectrumClaw/.cache/magic-pdf-models",
+  "layoutreader-model-dir": "/workspace/YiFan/SpectrumClaw/.cache/huggingface/hub/models--hantian--layoutreader/snapshots/0000000000000000000000000000000000000000",
+  "layout-config": {"model": "doclayout_yolo"},
+  "formula-config": {"enable": false},
+  "table-config": {"enable": false},
+  "config_version": "1.1.1"
+}

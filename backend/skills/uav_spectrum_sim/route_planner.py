@@ -7,6 +7,8 @@ import math
 from collections.abc import Iterable
 from typing import Any
 
+from ..spectrum_construction.spatial_grid import SPECTRUM_RT_ACQUISITION_STRIDE_M
+
 
 Point3 = tuple[float, float, float]
 GridNode = tuple[int, int]
@@ -26,7 +28,7 @@ def coverage_cell_key(
     point: tuple[float, ...],
     *,
     origin_m: tuple[float, float] = (-60.0, -60.0),
-    cell_size_m: float = 4.0,
+    cell_size_m: float = SPECTRUM_RT_ACQUISITION_STRIDE_M,
 ) -> CoverageCell:
     """Map an ENU point to the live grid's north-down ``(row, column)`` key."""
     east, north = _horizontal_point(point)
@@ -48,7 +50,7 @@ def trace_coverage_cells(
     end: tuple[float, ...],
     *,
     origin_m: tuple[float, float] = (-60.0, -60.0),
-    cell_size_m: float = 4.0,
+    cell_size_m: float = SPECTRUM_RT_ACQUISITION_STRIDE_M,
 ) -> tuple[CoverageCell, ...]:
     """Return every horizontal measurement cell crossed by a line segment."""
     start_xy = _horizontal_point(start)
@@ -99,9 +101,12 @@ def route_coverage_metrics(
     route: Iterable[Point3],
     prior_visited_cells: Iterable[CoverageCell] = (),
     origin_m: tuple[float, float] = (-60.0, -60.0),
-    cell_size_m: float = 4.0,
-) -> dict[str, float | int]:
+    cell_size_m: float = SPECTRUM_RT_ACQUISITION_STRIDE_M,
+) -> dict[str, float | int | str]:
     """Summarize distance and repeated measurement-cell entries for a route."""
+    size = float(cell_size_m)
+    if not math.isfinite(size) or size <= 0:
+        raise ValueError("覆盖网格分辨率必须为有限正数")
     known_before = {tuple(cell) for cell in prior_visited_cells}
     seen = set(known_before)
     route_cells: set[CoverageCell] = set()
@@ -119,7 +124,7 @@ def route_coverage_metrics(
             current,
             exact_waypoint,
             origin_m=origin_m,
-            cell_size_m=cell_size_m,
+            cell_size_m=size,
         )
         for cell in segment_cells:
             if cell == previous_cell:
@@ -137,6 +142,8 @@ def route_coverage_metrics(
             previous_cell = cell
         current = exact_waypoint
     return {
+        "coordinate_space": "rt_acquisition",
+        "cell_size_m": size,
         "cell_visits": visits,
         "unique_cells": len(route_cells),
         "new_cells": new_cells,
@@ -235,7 +242,7 @@ def plan_obstacle_aware_route(
     clearance_m: float = 2.5,
     visited_cells: Iterable[CoverageCell] = (),
     coverage_origin_m: tuple[float, float] = (-60.0, -60.0),
-    coverage_cell_size_m: float = 4.0,
+    coverage_cell_size_m: float = SPECTRUM_RT_ACQUISITION_STRIDE_M,
     revisit_penalty_m: float = 0.0,
 ) -> tuple[Point3, ...]:
     """Plan a collision-free route with coverage-aware A*.

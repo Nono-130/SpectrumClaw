@@ -10,6 +10,7 @@ import uuid
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Callable
 
+from ..spectrum_construction.spatial_grid import SPECTRUM_RT_ACQUISITION_STRIDE_M
 from .contracts import MissionPlan
 from .mission import UavMissionService
 from .route_planner import Point3, plan_obstacle_aware_route, route_coverage_metrics
@@ -114,7 +115,7 @@ class SpectrumSurveyService:
             resolution_m=2.0,
             clearance_m=2.5,
             coverage_origin_m=(-60.0, -60.0),
-            coverage_cell_size_m=4.0,
+            coverage_cell_size_m=SPECTRUM_RT_ACQUISITION_STRIDE_M,
             revisit_penalty_m=SURVEY_REVISIT_PENALTY_M,
         )
 

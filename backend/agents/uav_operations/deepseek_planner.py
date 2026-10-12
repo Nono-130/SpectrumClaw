@@ -15,10 +15,19 @@ from .sandbox import MissionSandbox
 class DeepSeekMissionPlanner:
     """Generate an auditable model proposal; never permit it to fly directly."""
 
-    def __init__(self, author: MissionAuthor, sandbox: MissionSandbox, *, ask: Callable[[str], str] | None = None) -> None:
+    def __init__(
+        self,
+        author: MissionAuthor,
+        sandbox: MissionSandbox,
+        *,
+        ask: Callable[[str], str] | None = None,
+        timeout_s: float = 10.0,
+    ) -> None:
+        if not 0 < timeout_s <= 60:
+            raise ValueError("DeepSeek 任务规划超时必须在 0 到 60 秒之间")
         self._author = author
         self._sandbox = sandbox
-        self._ask = ask or self._ask_deepseek
+        self._ask = ask or (lambda prompt: self._ask_deepseek(prompt, timeout_s=timeout_s))
 
     @staticmethod
     def _prompt(intent: str) -> str:
@@ -43,19 +52,26 @@ class DeepSeekMissionPlanner:
         return parsed
 
     @staticmethod
-    def _ask_deepseek(prompt: str) -> str:
+    def _ask_deepseek(prompt: str, *, timeout_s: float) -> str:
         from ...config import get_settings
         from ...llm.client import chat
 
         if not get_settings().provider_profile("deepseek").configured:
             raise RuntimeError("DeepSeek 尚未配置")
-        reply, _metadata = asyncio.run(chat(
-            [{"role": "system", "content": "严格遵守 UAV 任务 JSON 合约。"}, {"role": "user", "content": prompt}],
-            provider_override="deepseek",
-            thinking_enabled=False,
-            tool_names=None,
-        ))
-        return reply
+
+        async def request() -> str:
+            reply, _metadata = await chat(
+                [{"role": "system", "content": "严格遵守 UAV 任务 JSON 合约。"}, {"role": "user", "content": prompt}],
+                provider_override="deepseek",
+                thinking_enabled=False,
+                tool_names=None,
+            )
+            return reply
+
+        try:
+            return asyncio.run(asyncio.wait_for(request(), timeout=timeout_s))
+        except TimeoutError as exc:
+            raise RuntimeError("DeepSeek 任务规划超时，已切换到确定性安全编译器") from exc
 
     def author(self, run_id: str, intent: str) -> tuple[Any, dict[str, Any]]:
         # The deterministic parser establishes the non-negotiable safety

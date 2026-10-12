@@ -16,6 +16,7 @@ from ..skills.uav_spectrum_sim.contracts import MissionPlan, build_mission_plan
 from ..skills.uav_spectrum_sim.mission import get_uav_mission_service
 from ..skills.uav_spectrum_sim.templates import list_templates
 from .uav_contract import capability_document
+from .uav_spectrum_tools import get_spectrum_situation, measure_spectrum_at_current_pose
 
 
 mcp = FastMCP(
@@ -23,6 +24,8 @@ mcp = FastMCP(
     instructions=(
         "仅控制当前 SpectrumClaw PX4/Gazebo 仿真。"
         "先查询 uav_get_state；飞行前需有明确用户意图。"
+        "频谱工具只允许读取当前固定 2.4 GHz Sionna RT 配置，"
+        "不得传入频点、场景文件、脚本或原始坐标。"
         "不可用于真实飞行器，也不可发送任意 MAVLink 或速度指令。"
     ),
     json_response=True,
@@ -90,6 +93,18 @@ def uav_cancel_mission() -> dict:
 def uav_get_run_events() -> list[dict]:
     """返回公开的执行、观测与安全审计事件。"""
     return get_uav_mission_service().recent_events()
+
+
+@mcp.tool()
+def uav_get_spectrum_situation() -> dict:
+    """读取最近验证过的 Sionna RT 频谱态势；不执行测量或飞行控制。"""
+    return get_spectrum_situation()
+
+
+@mcp.tool()
+def uav_measure_spectrum_at_current_pose() -> dict:
+    """在当前无人机 ENU 位姿采集固定 2.4 GHz Sionna RT 观测；不控制飞行。"""
+    return measure_spectrum_at_current_pose()
 
 
 @mcp.resource("spectrumclaw://uav/capabilities")

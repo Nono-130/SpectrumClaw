@@ -1,6 +1,6 @@
 #!/bin/bash
 # SpectrumClaw Server Setup — offline install
-# Run: bash scripts/setup_server.sh
+# Run: bash scripts/deploy/setup_server.sh
 
 set -e
 
@@ -22,11 +22,11 @@ WHEELHOUSE="$PROJECT_DIR/wheelhouse"
 if [ -d "$WHEELHOUSE" ] && [ "$(ls -A "$WHEELHOUSE")" ]; then
     echo ""
     echo "=== Installing dependencies from wheelhouse (offline) ==="
-    pip install --no-index --find-links="$WHEELHOUSE" -r "$PROJECT_DIR/requirements.txt"
+    pip install --no-index --find-links="$WHEELHOUSE" -r "$PROJECT_DIR/config/dependencies/requirements.txt"
 else
     echo ""
     echo "=== No wheelhouse found. Attempting online install ==="
-    pip install -r "$PROJECT_DIR/requirements.txt"
+    pip install -r "$PROJECT_DIR/config/dependencies/requirements.txt"
 fi
 
 # ── Step 3: Download MinerU models ──

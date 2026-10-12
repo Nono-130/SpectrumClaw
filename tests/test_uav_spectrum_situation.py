@@ -157,7 +157,8 @@ def test_realtime_spectrum_grid_api_exposes_the_selected_height_and_transmitter(
             return {
                 "layer_index": layer_index,
                 "transmitter_id": transmitter_id,
-                "shape": [30, 30],
+                "shape": [128, 128],
+                "cell_size_m": 0.9375,
                 "values_dbm": [[-50.0]],
                 "observed_cells": 1,
             }
@@ -175,6 +176,8 @@ def test_realtime_spectrum_grid_api_exposes_the_selected_height_and_transmitter(
     assert response.status_code == 200
     assert response.json()["layer_index"] == 4
     assert response.json()["transmitter_id"] == "tx-01"
+    assert response.json()["shape"] == [128, 128]
+    assert response.json()["cell_size_m"] == 0.9375
 
 
 def test_spectrum_survey_api_starts_and_reports_the_fixed_layer_campaign(monkeypatch):

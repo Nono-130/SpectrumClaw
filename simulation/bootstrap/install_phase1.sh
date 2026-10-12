@@ -130,7 +130,7 @@ install_sionna_rt() {
     retry "$CONDA_BIN" create -y -n spectrumclaw-rt python=3.11 pip
   fi
   retry "$CONDA_BIN" run -n spectrumclaw-rt python -m pip install \
-    --retries 12 --timeout 60 --prefer-binary 'sionna-rt==2.0.1'
+    --retries 12 --timeout 60 --prefer-binary 'sionna-rt==2.0.1' 'PyYAML==6.0.2'
 }
 
 source_ros_humble() {
@@ -177,11 +177,12 @@ verify_sionna_rt() {
   "$CONDA_BIN" run --no-capture-output -n spectrumclaw-rt env CUDA_VISIBLE_DEVICES=0 python - <<'PY'
 import mitsuba as mi
 import sionna.rt
+import yaml
 
 mi.set_variant("cuda_ad_rgb")
 variant = mi.variant()
 assert variant.startswith("cuda"), f"Expected CUDA Mitsuba variant, got {variant!r}"
-print("SIONNA_RT_SMOKE_OK", sionna.rt.__version__, variant)
+print("SIONNA_RT_SMOKE_OK", sionna.rt.__version__, yaml.__version__, variant)
 PY
 }
 

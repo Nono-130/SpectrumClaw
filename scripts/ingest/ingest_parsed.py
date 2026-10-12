@@ -6,7 +6,7 @@ filters by block type, embeds text content, stores in ChromaDB.
 
 Usage:
     CUDA_VISIBLE_DEVICES=1 SPECTRUMCLAW_EMBEDDING_DEVICE=cuda \
-    python scripts/ingest_parsed.py [--clear] [--limit N]
+    python scripts/ingest/ingest_parsed.py [--clear] [--limit N]
 """
 
 import argparse
@@ -18,7 +18,7 @@ import time
 from collections import Counter
 from pathlib import Path
 
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(PROJECT_ROOT))
 
 PARSED_DIR = PROJECT_ROOT / "data" / "parsed"

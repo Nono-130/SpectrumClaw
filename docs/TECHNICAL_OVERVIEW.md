@@ -18,7 +18,7 @@
 | Skills | `backend/skills/` | 频率规划、频谱构建、频谱决策三个能力单元 |
 | Knowledge / RAG | `backend/rag/` | 文档解析、向量库、知识图谱、混合检索、流式问答 |
 | Memory | `backend/memory/` | SQLite 记忆存储、技能审计、用户反馈、进化反思 |
-| Tools | `backend/tools/` | 工具注册表 + LangChain Tool 适配 |
+| Tools | `backend/tools/` | 单一 `ToolSpec` 注册表、统一执行运行时以及 Native / LLM / LangChain / MCP 适配 |
 
 ### 0.2 运行时模型
 
@@ -132,6 +132,26 @@ router ──┬─(rag)──→ rag_search ──┐
 - `error`：异常信息
 
 前端按 `data: {json}\n\n` 解析。`done` 事件里的 `feedback_target_id` 是记忆反馈闭环的锚点。
+
+### 1.6 统一工具契约与 MCP 适配
+
+所有内置工具只在 `backend/tools/registry.py` 登记一次。每个 `ToolSpec` 同时保存名称、描述、输入 JSON Schema、Handler、分类、超时、只读属性和协议暴露策略；`ToolRuntime` 统一执行参数校验、同步/异步调用、超时及结构化错误。
+
+```text
+ToolSpec Registry（唯一事实源）
+          │
+      ToolRuntime
+   ┌──────┼────────┬──────────┐
+ Native  LLM    LangChain    MCP
+```
+
+- 内置 Agent 默认通过 Native Runtime 同进程调用，不承担 MCP transport 的额外生命周期和序列化开销。
+- `backend/llm/client.py` 的旧注册函数保留为兼容门面，但不再维护私有 Registry。
+- `backend/tools/mcp_adapter.py` 只发布 `mcp_enabled=True` 的工具；新增工具不会因为进入 Registry 就自动对外公开。
+- 通用入口 `python -m backend.mcp.tool_server` 默认使用 `stdio`，目前公开天气、Web 搜索、知识库检索和频率规划。任意 URL 抓取、系统内部状态和控制工具保持 Native-only。
+- UAV 使用独立的 `backend.mcp.uav_server` 安全域，继续由 `UavMissionService`、任务模板、策略检查和人工接管规则约束，不并入通用 MCP Server。
+
+后续增加能力时，先实现领域服务或 Handler，再创建唯一 `ToolSpec`；只有确实需要外部 Agent 发现和调用时，才显式开启 MCP 暴露。
 
 ---
 
@@ -531,13 +551,13 @@ with track_skill_run("spectrum_construction", input_data=req.model_dump()) as ru
 ```text
 服务器 backend (DEEPSEEK_BASE_URL=http://127.0.0.1:8240/v1)
    → SSH 反向隧道 (ssh -R 8240:127.0.0.1:8240)
-      → 本地转发代理 (scripts/llm_forward_proxy.py, 监听 127.0.0.1:8240)
+      → 本地转发代理 (scripts/local/llm_forward_proxy.py, 监听 127.0.0.1:8240)
          → https://api.deepseek.com  （本地可联网）
 ```
 
 三个组件：
 
-1. **本地转发代理** `scripts/llm_forward_proxy.py`：Starlette + httpx 透明转发，监听 `127.0.0.1:8240`，把任意路径原样转发到 `UPSTREAM`（默认 deepseek），保留 method/body/Authorization，**流式回传**（SSE-friendly，支持逐 token）。
+1. **本地转发代理** `scripts/local/llm_forward_proxy.py`：Starlette + httpx 透明转发，监听 `127.0.0.1:8240`，把任意路径原样转发到 `UPSTREAM`（默认 deepseek），保留 method/body/Authorization，**流式回传**（SSE-friendly，支持逐 token）。
 2. **SSH 反向隧道**：`ssh -N -R 8240:127.0.0.1:8240 -o ServerAliveInterval=30 <server>`，把本地 8240 暴露到服务器 `127.0.0.1:8240`。
 3. **服务器 `.env`**：加 `DEEPSEEK_BASE_URL=http://127.0.0.1:8240/v1`，让 deepseek profile 指向隧道（仅服务器侧，本地 `.env` 不变）。
 

@@ -12,6 +12,7 @@ SpectrumClaw/
 │   ├── local/               # 本机启动、网络恢复、隧道与本地 LLM 转发
 │   ├── deploy/              # 服务器部署与环境初始化
 │   ├── ingest/              # MinerU 解析、PDF 去重、回填、入库与批处理
+│   ├── training/            # 可复现模型训练入口
 │   ├── eval/                # RAG 评测与报告
 │   └── offline/             # 离线安装说明
 ├── tests/                   # 自动化测试；固定夹具仅放 tests/data/

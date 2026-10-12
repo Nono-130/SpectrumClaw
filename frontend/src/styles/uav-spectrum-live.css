@@ -145,7 +145,9 @@
   box-shadow: inset 0 0 42px oklch(0.78 0.13 205 / .05);
 }
 
-.uav-spectrum-layer-canvas > svg { display: block; width: 100%; height: 100%; min-height: 460px; }
+.uav-spectrum-layer-canvas > svg { position: relative; z-index: 1; display: block; width: 100%; height: 100%; min-height: 460px; }
+.uav-rem-raster { position: absolute; z-index: 0; inset: 0; width: 100%; height: 100%; object-fit: contain; image-rendering: auto; pointer-events: none; }
+.uav-rem-raster.is-mini { height: 152px; }
 .uav-rem-unknown { fill: oklch(0.08 0.022 235); }
 .uav-rem-grid-lines { color: oklch(0.75 0.08 205 / .22); pointer-events: none; }
 .uav-rem-measured-cell { stroke: oklch(0.98 0 0 / .08); stroke-width: .08; transition: fill 180ms linear; }

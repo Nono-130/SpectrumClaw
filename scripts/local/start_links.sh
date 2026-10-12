@@ -16,7 +16,7 @@
 set -uo pipefail
 
 PROJECT_ROOT="/home/weiyifan/workspace/SpectrumClaw"
-PROXY_SCRIPT="$PROJECT_ROOT/scripts/llm_forward_proxy.py"
+PROXY_SCRIPT="$PROJECT_ROOT/scripts/local/llm_forward_proxy.py"
 PY="/home/weiyifan/miniconda3/envs/SpectrumClaw/bin/python"
 
 # 3090 connection (via jump-27)

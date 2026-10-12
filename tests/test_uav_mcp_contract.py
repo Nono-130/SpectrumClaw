@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 
-def test_mcp_contract_exposes_only_plan_level_flight_tools():
+def test_mcp_contract_exposes_only_plan_level_flight_and_fixed_profile_rf_tools():
     from backend.mcp.uav_contract import MCP_UAV_TOOL_NAMES, capability_document
 
     assert MCP_UAV_TOOL_NAMES == (
@@ -13,11 +13,34 @@ def test_mcp_contract_exposes_only_plan_level_flight_tools():
         "uav_execute_plan",
         "uav_cancel_mission",
         "uav_get_run_events",
+        "uav_get_spectrum_situation",
+        "uav_measure_spectrum_at_current_pose",
     )
     document = capability_document()
     assert "raw_mavlink" in document["not_exposed"]
     assert "arbitrary_velocity" in document["not_exposed"]
+    assert "arbitrary_frequency" in document["not_exposed"]
+    assert "arbitrary_sionna_scene" in document["not_exposed"]
     assert document["scope"] == "px4_gazebo_simulation_only"
+
+
+def test_mcp_spectrum_tools_expose_only_current_state_and_current_pose_measurement(monkeypatch):
+    from backend.mcp import uav_spectrum_tools
+
+    status = {"runtime": {"state": "running", "camera": {"vehicle": {"position_m": [1.0, 2.0, 20.0]}}}}
+    situation = {"available": True, "current": True, "observation": {"source": "sionna_rt"}}
+    observed = {
+        "kind": "spectrum_observation", "source": "sionna_rt", "profile_id": "sionna_urban_2_4ghz",
+        "timestamp": 100.0, "position_m": [1.0, 2.0, 20.0],
+    }
+    monkeypatch.setattr(uav_spectrum_tools, "get_runtime_status", lambda: status)
+    monkeypatch.setattr(uav_spectrum_tools, "get_sionna_spectrum_situation", lambda **kwargs: situation)
+    monkeypatch.setattr(uav_spectrum_tools, "collect_current_sionna_observation", lambda **kwargs: observed)
+
+    assert uav_spectrum_tools.get_spectrum_situation() == situation
+    result = uav_spectrum_tools.measure_spectrum_at_current_pose()
+    assert result["observation"] == observed
+    assert result["current"] is True
 
 
 def test_native_registry_exposes_the_same_declarative_plan_schema():

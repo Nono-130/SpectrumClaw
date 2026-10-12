@@ -15,6 +15,8 @@ MCP_UAV_TOOL_NAMES = (
     "uav_execute_plan",
     "uav_cancel_mission",
     "uav_get_run_events",
+    "uav_get_spectrum_situation",
+    "uav_measure_spectrum_at_current_pose",
 )
 
 
@@ -31,6 +33,9 @@ def capability_document() -> dict[str, Any]:
             "arbitrary_shell",
             "arbitrary_velocity",
             "raw_coordinates",
+            "arbitrary_frequency",
+            "arbitrary_sionna_scene",
+            "raw_rf_script",
             "real_vehicle_control",
         ],
     }

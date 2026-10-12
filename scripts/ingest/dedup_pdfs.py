@@ -5,9 +5,9 @@ filename with the highest version number, then longest name as tiebreaker).
 Moved duplicates go to data/knowledge_base/duplicates/ for manual review.
 
 Usage (run on server):
-    python scripts/dedup_pdfs.py                      # dry-run (report only)
-    python scripts/dedup_pdfs.py --execute            # actually move files
-    python scripts/dedup_pdfs.py --dir /custom/path   # custom PDF directory
+    python scripts/ingest/dedup_pdfs.py                      # dry-run (report only)
+    python scripts/ingest/dedup_pdfs.py --execute            # actually move files
+    python scripts/ingest/dedup_pdfs.py --dir /custom/path   # custom PDF directory
 """
 
 from __future__ import annotations
@@ -44,7 +44,7 @@ def main():
     ap.add_argument("--execute", action="store_true", help="Actually move duplicates (default: dry-run)")
     args = ap.parse_args()
 
-    project_root = Path(__file__).resolve().parents[1]
+    project_root = Path(__file__).resolve().parents[2]
     pdf_dir = Path(args.dir) if args.dir else project_root / "data" / "knowledge_base" / "raw"
     dup_dir = pdf_dir.parent / "duplicates"
 

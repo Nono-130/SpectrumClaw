@@ -1,7 +1,8 @@
 import { useMemo, useState } from "react";
 import { Activity, Clock3, Eye, EyeOff, Grid2x2, Layers3, Navigation, Play, Radio, RefreshCw, Route, Signal } from "lucide-react";
-import { spectrumColor, spectrumColorRange, spectrumEstimatedSources, spectrumGridCells, spectrumMeasurementTrack } from "../../lib/spectrumGrid.js";
+import { spectrumColorRange, spectrumEstimatedSources, spectrumGridHasValues, spectrumMeasurementTrack } from "../../lib/spectrumGrid.js";
 import { rayDisplayPoints } from "../../lib/spectrumRays.js";
+import SpectrumGridCanvas from "./SpectrumGridCanvas.jsx";
 
 const MAP_RANGE_M = 60;
 const LAYERS = [0, 1, 2, 3, 4, 5];
@@ -60,10 +61,12 @@ export default function UavSpectrumLayerMap({
   const paths = useMemo(() => anchors
     .filter((anchor) => selectedTransmitter === "all" || anchor.id === selectedTransmitter)
     .flatMap((anchor) => (anchor.ray_paths || []).map((path) => ({ ...path, anchorId: anchor.id }))), [anchors, selectedTransmitter]);
-  const [rows = 30, columns = 30] = grid?.shape || [30, 30];
+  const [rows = 128, columns = 128] = grid?.shape || [128, 128];
   const cellWidth = 100 / Math.max(1, columns);
   const cellHeight = 100 / Math.max(1, rows);
-  const cells = useMemo(() => spectrumGridCells(grid), [grid]);
+  const majorGridWidth = cellWidth * (columns >= 64 ? 8 : 1);
+  const majorGridHeight = cellHeight * (rows >= 64 ? 8 : 1);
+  const hasGridValues = useMemo(() => spectrumGridHasValues(grid), [grid]);
   const colorRange = useMemo(() => spectrumColorRange(grid), [grid]);
   const vehiclePosition = Array.isArray(vehicle?.position_m) ? vehicle.position_m : situation?.current_position_m;
   const measurementTrack = useMemo(
@@ -83,7 +86,7 @@ export default function UavSpectrumLayerMap({
     .filter(Number.isFinite)
     .reduce((strongest, value) => Math.max(strongest, value), Number.NEGATIVE_INFINITY);
   const frequency = Number(situation?.observation?.frequency_hz);
-  const reconstructionReady = Boolean(grid?.reconstruction?.ready);
+  const reconstructionReady = Boolean(grid?.reconstruction?.ready || grid?.reconstruction?.stale);
   const estimatedSources = useMemo(
     () => spectrumEstimatedSources(grid, selectedTransmitter),
     [grid, selectedTransmitter],
@@ -99,7 +102,7 @@ export default function UavSpectrumLayerMap({
         <div>
           <span className="eyebrow">LIVE SPECTRUM SITUATION · LOCAL ENU</span>
           <h2><Grid2x2 size={17} /> 电磁频谱态势</h2>
-          <p>{rows} × {columns} 网格 · {grid?.cell_size_m ?? 4} m/格 · Z {Number(layerRange[0]).toFixed(0)}–{Number(layerRange[1]).toFixed(0)} m</p>
+          <p>{rows} × {columns} 网格 · {grid?.cell_size_m ?? 0.9375} m/格 · Z {Number(layerRange[0]).toFixed(0)}–{Number(layerRange[1]).toFixed(0)} m</p>
         </div>
         <span className="uav-spectrum-compute-state" data-state={computing ? "running" : situation?.current ? "current" : "idle"}>
           <Activity size={12} /> {computing ? "GPU 射线计算中" : situation?.current ? "实时采集中" : "等待位姿变化"}
@@ -126,27 +129,14 @@ export default function UavSpectrumLayerMap({
       </div>
 
       <div className="uav-spectrum-layer-canvas">
+        <SpectrumGridCanvas grid={grid} colorRange={colorRange} />
         <svg viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet">
           <defs>
-            <pattern id="live-rem-grid" width={cellWidth} height={cellHeight} patternUnits="userSpaceOnUse">
-              <path d={`M ${cellWidth} 0 L 0 0 0 ${cellHeight}`} fill="none" stroke="currentColor" strokeWidth=".12" />
+            <pattern id="live-rem-grid" width={majorGridWidth} height={majorGridHeight} patternUnits="userSpaceOnUse">
+              <path d={`M ${majorGridWidth} 0 L 0 0 0 ${majorGridHeight}`} fill="none" stroke="currentColor" strokeWidth=".12" />
             </pattern>
           </defs>
-          <rect className="uav-rem-unknown" width="100" height="100" />
           <path className="uav-spectrum-road" d="M0 50 H100 M50 0 V100" />
-          {cells.map((cell) => (
-            <rect
-              key={`${cell.row}-${cell.column}`}
-              className={`uav-rem-measured-cell ${cell.measured ? "is-measured" : "is-estimated"}`}
-              x={cell.column * cellWidth}
-              y={cell.row * cellHeight}
-              width={cellWidth}
-              height={cellHeight}
-              fill={spectrumColor(cell.value, colorRange.min, colorRange.max, cell.measured ? 0.96 : 0.84)}
-            >
-              <title>{`cell [${cell.row}, ${cell.column}] · ${Number(cell.value).toFixed(2)} dBm · ${cell.measured ? "无人机实测" : "盲源定位 + 残差插值"}`}</title>
-            </rect>
-          ))}
           <rect className="uav-rem-grid-lines" width="100" height="100" fill="url(#live-rem-grid)" />
           {objects.map((object) => {
             const [x, y] = mapPoint(object.position_m || []);
@@ -168,10 +158,10 @@ export default function UavSpectrumLayerMap({
           {currentUpdate && <rect className="uav-rem-current-cell" x={currentUpdate.column * cellWidth} y={currentUpdate.row * cellHeight} width={cellWidth} height={cellHeight} />}
           {vehiclePosition && <g transform={`translate(${vehicleX} ${vehicleY})`} className="uav-rem-vehicle"><circle r="2.8" /><path d="M0 -2.4 L1.2 0 L2.4 1.2 L.7 1.2 L0 2.4 L-.7 1.2 L-2.4 1.2 L-1.2 0 Z" /></g>}
         </svg>
-        <div className="uav-rem-map-hud top-left"><Radio size={11} /> {reconstructionReady ? "盲源定位 + 残差插值" : selectedTransmitter === "all" ? "总 RF 功率" : `${selectedTransmitter} RSS`}</div>
+        <div className="uav-rem-map-hud top-left"><Radio size={11} /> {grid?.reconstruction?.stale ? "上一版补全 + 最新实测" : reconstructionReady ? "盲源定位 + 残差插值" : selectedTransmitter === "all" ? "总 RF 功率" : `${selectedTransmitter} RSS`}</div>
         <div className="uav-rem-map-hud top-right"><Route size={11} /> {measurementTrack.length} 个航迹实测格 · {paths.length} 条拓扑</div>
         <div className="uav-rem-colorbar"><span>{colorRange.min.toFixed(1)} dBm</span><i /><span>{colorRange.max.toFixed(1)} dBm</span></div>
-        {(loading || error || !cells.length) && <div className="uav-rem-empty-layer"><strong>{loading ? "正在加载高度层" : error ? "高度层读取失败" : "当前高度层尚无测量格"}</strong><span>{error || (loading ? "正在同步 3090 上的实时网格…" : "无人机进入该层并移动后，Sionna RT 观测会实时写入网格。")}</span></div>}
+        {(loading || error || !hasGridValues) && <div className="uav-rem-empty-layer"><strong>{loading ? "正在加载高度层" : error ? "高度层读取失败" : "当前高度层尚无测量格"}</strong><span>{error || (loading ? "正在同步 3090 上的实时网格…" : "无人机进入该层并移动后，Sionna RT 观测会实时写入网格。")}</span></div>}
       </div>
 
       <div className="uav-spectrum-survey-control" data-state={survey?.state || "idle"}>

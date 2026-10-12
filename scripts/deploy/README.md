@@ -4,10 +4,10 @@
 
 | 脚本 | 用途 |
 | --- | --- |
-| `scripts/server_deploy.sh` | 服务器部署/同步入口。 |
-| `scripts/setup_server.sh` | 服务器初始化。 |
-| `scripts/server_full_ingest.sh` | 服务器全量知识库入库。 |
-| `scripts/server_parallel_chain.sh` | 并行处理链路。 |
+| `scripts/deploy/server_deploy.sh` | 服务器部署/同步入口。 |
+| `scripts/deploy/setup_server.sh` | 服务器初始化。 |
+| `scripts/ingest/server_full_ingest.sh` | 服务器全量知识库入库。 |
+| `scripts/ingest/server_parallel_chain.sh` | 并行处理链路。 |
 | `scripts/local/start_links.sh` | 本地到服务器的 proxy + autossh 链路守护。 |
 | `scripts/local/install_user_services.sh` | 安装本地 systemd 用户服务；默认只托管服务器链路。 |
 | `scripts/local/reconnect_network.sh` | 切换网络后重连服务器链路并输出服务器前端地址。 |

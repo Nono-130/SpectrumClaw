@@ -6,10 +6,10 @@ GPU 服务器或生产环境可能无法直接联网。依赖管理分为主后�
 
 | 文件 | 用途 |
 | --- | --- |
-| `requirements.txt` | 主后端运行依赖。 |
-| `requirements-offline.txt` | 离线安装清单。 |
-| `requirements-mineru.txt` | MinerU 解析环境依赖。 |
-| `environment.yml` | Conda 环境定义。 |
+| `config/dependencies/requirements.txt` | 主后端运行依赖。 |
+| `config/dependencies/requirements-offline.txt` | 离线安装清单。 |
+| `config/dependencies/requirements-mineru.txt` | MinerU 解析环境依赖。 |
+| `config/dependencies/environment.yml` | Conda 环境定义。 |
 | `frontend/package-lock.json` | 前端依赖锁定。 |
 
 ## 建议流程
@@ -24,8 +24,8 @@ GPU 服务器或生产环境可能无法直接联网。依赖管理分为主后�
 Python 示例：
 
 ```bash
-python -m pip download -r requirements-offline.txt -d wheelhouse
-python -m pip install --no-index --find-links wheelhouse -r requirements-offline.txt
+python -m pip download -r config/dependencies/requirements-offline.txt -d wheelhouse
+python -m pip install --no-index --find-links wheelhouse -r config/dependencies/requirements-offline.txt
 ```
 
 前端示例：

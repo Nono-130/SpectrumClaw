@@ -25,7 +25,7 @@ SpectrumClaw 支持本地开发，也支持本地前端 + GPU 服务器后端的
 ```bash
 python -m venv .venv
 source .venv/bin/activate
-python -m pip install -r requirements.txt
+python -m pip install -r config/dependencies/requirements.txt
 npm --prefix frontend install
 ```
 
@@ -72,10 +72,10 @@ scripts/local/start_links.sh stop
 
 | 脚本 | 用途 |
 | --- | --- |
-| `scripts/server_deploy.sh` | 服务器部署/同步入口。 |
-| `scripts/setup_server.sh` | 服务器环境初始化。 |
-| `scripts/server_full_ingest.sh` | 全量知识库入库。 |
-| `scripts/server_parallel_chain.sh` | 批处理链路。 |
+| `scripts/deploy/server_deploy.sh` | 服务器部署/同步入口。 |
+| `scripts/deploy/setup_server.sh` | 服务器环境初始化。 |
+| `scripts/ingest/server_full_ingest.sh` | 全量知识库入库。 |
+| `scripts/ingest/server_parallel_chain.sh` | 批处理链路。 |
 | `scripts/deploy/README.md` | 部署脚本说明。 |
 | `scripts/offline/README.md` | 离线依赖说明。 |
 

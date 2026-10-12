@@ -1,0 +1,32 @@
+schema_version: spectrumclaw.rem.hwf.v1
+axis_order: HWF
+shape: [128, 128, 5]
+bounds_enu_m: [-60.0, 60.0, -60.0, 60.0]
+receiver_altitude_m: 21.0
+
+# Configurable defaults spanning common sub-6 GHz operating bands.  The
+# existing online 2.4 GHz measurement remains the third channel.
+frequencies_hz:
+  - 1000000000.0
+  - 1400000000.0
+  - 2400000000.0
+  - 3500000000.0
+  - 5800000000.0
+
+provider: sionna
+
+ray_tracing:
+  asset_dir: /workspace/YiFan/spectrumclaw_runtime/artifacts/uav-rem-dataset/scene
+  source_altitude_m: 1.5
+  samples_per_tx: 10000000
+  max_depth: 2
+
+sampling:
+  modes: [random_walk, lawnmower, random_points]
+  ratio_range: [0.005, 0.05]
+
+dataset:
+  output: data/uav-rem-multiband
+  seed: 20260812
+  scenes: 50
+  masks_per_scene: 8

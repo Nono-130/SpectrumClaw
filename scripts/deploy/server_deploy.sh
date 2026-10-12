@@ -1,6 +1,6 @@
 #!/bin/bash
 # SpectrumClaw Server Deploy — run after extracting archive on server
-# Usage: tar xzf spectrumclaw_server.tar.gz -C /root/ && cd /root/SpectrumClaw && bash scripts/server_deploy.sh
+# Usage: tar xzf spectrumclaw_server.tar.gz -C /root/ && cd /root/SpectrumClaw && bash scripts/deploy/server_deploy.sh
 
 set -e
 
@@ -51,7 +51,7 @@ WHEELHOUSE="$PROJECT_DIR/wheelhouse"
 if [ -d "$WHEELHOUSE" ]; then
     echo ""
     echo "=== Installing pip dependencies (offline) ==="
-    $PIP_CMD install --no-index --find-links="$WHEELHOUSE" -r "$PROJECT_DIR/requirements-offline.txt"
+    $PIP_CMD install --no-index --find-links="$WHEELHOUSE" -r "$PROJECT_DIR/config/dependencies/requirements-offline.txt"
 
     echo ""
     echo "=== Installing MinerU + Magic-PDF (offline) ==="

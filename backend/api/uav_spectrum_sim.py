@@ -97,7 +97,7 @@ def spectrum_grid(
     layer_index: int = Query(default=4, ge=0, le=100),
     transmitter_id: str = Query(default="all", min_length=1, max_length=64),
 ):
-    """Return measured cells for one vertical layer; unknown cells remain null."""
+    """Return one 128×128 spectrum layer; unmeasured sparse cells remain null."""
     return get_realtime_sionna_coordinator().grid_snapshot(
         layer_index=layer_index,
         transmitter_id=transmitter_id,

@@ -1,0 +1,70 @@
+# Runtime state and large/generated roots are always excluded.
+- /.git/***
++ /.env.example
+- /.env
+- /.env.*
+- /data/***
+- /logs/***
+- /outputs/***
+- /output/***
+- /runs/***
+- /models/***
+- /checkpoints/***
+- /wheelhouse/***
+- /frontend/node_modules/***
+- /frontend/dist/***
+- /simulation/third_party/***
+
+# Generated or machine-local content inside otherwise allowed source trees.
+- **/__pycache__/***
+- **/.pytest_cache/***
+- **/.ruff_cache/***
+- **/.mypy_cache/***
+- **/node_modules/***
+- **/dist/***
+- **/models/***
+- **/checkpoints/***
+- *.log
+- *.out
+- *.pid
+- *.sock
+- *.sqlite*
+- *.jsonl
+- *.pt
+- *.pth
+- *.ckpt
+- *.safetensors
+- *.onnx
+- *.gguf
+- *.npy
+- *.npz
+- *.zip
+- *.tar
+- *.tar.gz
+- *.tgz
+
+# Source, scripts, configuration, tests, documentation, and source assets.
++ /backend/***
++ /frontend/***
++ /scripts/***
++ /simulation/***
++ /tests/***
++ /config/***
++ /docs/***
++ /.github/***
++ /assets/***
++ /.gitignore
++ /README.md
++ /README_EN.md
++ /LICENSE
++ /LICENSE.*
++ /pyproject.toml
++ /pytest.ini
++ /requirements*.txt
++ /environment*.yml
++ /package.json
++ /package-lock.json
++ /run_ingest.sh
+
+# Deny everything that was not explicitly classified above.
+- *

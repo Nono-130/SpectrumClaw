@@ -6,7 +6,7 @@ PDFs one by one. Each file's output is written immediately to data/parsed/<stem>
 Supports resume (skips files that already have content_list.json).
 
 Usage:
-    CUDA_VISIBLE_DEVICES=1 MINERU_MODEL_SOURCE=local python scripts/batch_mineru_parse_api.py --shards 2 --shard-index 1 --port 39502
+    CUDA_VISIBLE_DEVICES=1 MINERU_MODEL_SOURCE=local python scripts/ingest/batch_mineru_parse_api.py --shards 2 --shard-index 1 --port 39502
 """
 
 import argparse
@@ -20,7 +20,7 @@ from pathlib import Path
 
 import httpx
 
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
 PDF_DIR = PROJECT_ROOT / "data" / "knowledge_base" / "raw"
 OUTPUT_DIR = PROJECT_ROOT / "data" / "parsed"
 

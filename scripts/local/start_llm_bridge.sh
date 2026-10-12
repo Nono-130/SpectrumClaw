@@ -13,7 +13,7 @@ set -uo pipefail
 
 PROJECT_ROOT="/home/lenovo/workspace/SpectrumClaw"
 PY="/home/lenovo/miniconda3/envs/SpectrumClaw/bin/python"
-PROXY_SCRIPT="$PROJECT_ROOT/scripts/llm_forward_proxy.py"
+PROXY_SCRIPT="$PROJECT_ROOT/scripts/local/llm_forward_proxy.py"
 SERVER="weiyifan3090"
 PORT=8240
 PROXY_LOG="/tmp/llm_proxy.log"

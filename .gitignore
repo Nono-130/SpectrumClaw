@@ -20,6 +20,8 @@ frontend/node_modules/
 logs/*.log
 outputs/*
 !outputs/.gitkeep
+.playwright-cli/
+output/playwright/
 
 # Knowledge base data (large files)
 data/knowledge_base/raw/*
@@ -56,6 +58,8 @@ wheelhouse/
 *~
 .DS_Store
 data/memory/*.sqlite*
+data/uav-agent-runs/
+data/uav-rem-multiband/
 runs/
 scripts/eval/
 data/eval/

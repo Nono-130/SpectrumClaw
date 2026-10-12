@@ -2,9 +2,21 @@
 
 from __future__ import annotations
 
+import copy
 import math
 import threading
+from collections import OrderedDict
 from typing import Any
+
+from ..spectrum_construction.spatial_grid import (
+    SPECTRUM_GRID_AREA_SIZE_M,
+    SPECTRUM_GRID_CELL_SIZE_M,
+    SPECTRUM_SPATIAL_SCHEMA,
+)
+
+
+_SOURCE_PRIOR_DISTANCE_SCALE_M = 4.0
+_MAX_SNAPSHOT_CACHE_ENTRIES = 12
 
 
 class RealtimeSpectrumGrid:
@@ -18,8 +30,8 @@ class RealtimeSpectrumGrid:
     def __init__(
         self,
         *,
-        area_size_m: float = 120.0,
-        cell_size_m: float = 4.0,
+        area_size_m: float = SPECTRUM_GRID_AREA_SIZE_M,
+        cell_size_m: float = SPECTRUM_GRID_CELL_SIZE_M[0],
         layer_step_m: float = 5.0,
     ) -> None:
         if area_size_m <= 0 or cell_size_m <= 0 or layer_step_m <= 0:
@@ -38,7 +50,9 @@ class RealtimeSpectrumGrid:
         self.max_north_m = self.area_size_m / 2
         self._layers: dict[int, dict[tuple[int, int], dict[str, Any]]] = {}
         self._layer_sample_counts: dict[int, int] = {}
+        self._layer_revisions: dict[int, int] = {}
         self._transmitters: set[str] = set()
+        self._snapshot_cache: OrderedDict[tuple[int, str], tuple[int, dict[str, Any]]] = OrderedDict()
         self._lock = threading.Lock()
 
     def clear_layer(self, layer_index: int) -> None:
@@ -47,6 +61,13 @@ class RealtimeSpectrumGrid:
         with self._lock:
             self._layers.pop(selected_layer, None)
             self._layer_sample_counts.pop(selected_layer, None)
+            self._layer_revisions[selected_layer] = self._layer_revisions.get(selected_layer, 0) + 1
+            self._invalidate_snapshot_cache_locked(selected_layer)
+
+    def _invalidate_snapshot_cache_locked(self, layer_index: int) -> None:
+        stale_keys = [key for key in self._snapshot_cache if key[0] == layer_index]
+        for key in stale_keys:
+            self._snapshot_cache.pop(key, None)
 
     @staticmethod
     def _power_mw(dbm: float) -> float:
@@ -69,7 +90,7 @@ class RealtimeSpectrumGrid:
         return layer_index, row, column
 
     def cell_key(self, position_m: list[float]) -> tuple[int, int, int] | None:
-        """Expose the stable layer/row/column identity used by the RT queue."""
+        """Expose the stable layer/row/column identity of the spectrum output."""
         return self._indices(position_m)
 
     def trace_positions(self, start_m: list[float], end_m: list[float]) -> list[dict[str, Any]]:
@@ -164,6 +185,12 @@ class RealtimeSpectrumGrid:
             cell["last_timestamp"] = timestamp
             cell["last_position_m"] = [float(value) for value in position]
             self._layer_sample_counts[layer_index] = self._layer_sample_counts.get(layer_index, 0) + 1
+            self._layer_revisions[layer_index] = self._layer_revisions.get(layer_index, 0) + 1
+            has_new_transmitter = any(key != "all" and key not in self._transmitters for key in powers)
+            if has_new_transmitter:
+                self._snapshot_cache.clear()
+            else:
+                self._invalidate_snapshot_cache_locked(layer_index)
             self._transmitters.update(key for key in powers if key != "all")
             cell_values_dbm = {
                 key: round(self._dbm(metric["sum_mw"] / metric["count"]), 4)
@@ -184,13 +211,22 @@ class RealtimeSpectrumGrid:
     def snapshot(self, *, layer_index: int, transmitter_id: str = "all") -> dict[str, Any]:
         selected_layer = max(0, int(layer_index))
         selected_tx = str(transmitter_id or "all")
+        cache_key = (selected_layer, selected_tx)
+        with self._lock:
+            cacheable = selected_tx == "all" or selected_tx in self._transmitters
+            revision = self._layer_revisions.get(selected_layer, 0)
+            cached = self._snapshot_cache.get(cache_key) if cacheable else None
+            cached_result = cached[1] if cached is not None and cached[0] == revision else None
+            if cached_result is not None:
+                self._snapshot_cache.move_to_end(cache_key)
+            cells = copy.deepcopy(list(self._layers.get(selected_layer, {}).items())) if cached_result is None else []
+            available_transmitters = tuple(sorted(self._transmitters)) if cached_result is None else ()
+        if cached_result is not None:
+            return copy.deepcopy(cached_result)
         values: list[list[float | None]] = [[None for _ in range(self.columns)] for _ in range(self.rows)]
         counts: list[list[int]] = [[0 for _ in range(self.columns)] for _ in range(self.rows)]
         observed_mask: list[list[int]] = [[0 for _ in range(self.columns)] for _ in range(self.rows)]
         latest_timestamp = 0.0
-        with self._lock:
-            cells = list(self._layers.get(selected_layer, {}).items())
-            available_transmitters = sorted(self._transmitters)
         def matrix_for(transmitter: str) -> list[list[float | None]]:
             matrix: list[list[float | None]] = [[None for _ in range(self.columns)] for _ in range(self.rows)]
             for (cell_row, cell_column), cell in cells:
@@ -259,12 +295,14 @@ class RealtimeSpectrumGrid:
             "prior": "rss_inferred_source",
             "estimated_sources": estimated_sources,
         }
-        return {
+        result = {
+            "spatial_schema": SPECTRUM_SPATIAL_SCHEMA,
             "frame": "local-ENU",
             "metric": "total_rf_power_dbm" if selected_tx == "all" else "received_power_dbm",
             "transmitter_id": selected_tx,
-            "available_transmitters": available_transmitters,
+            "available_transmitters": list(available_transmitters),
             "layer_index": selected_layer,
+            "revision": revision,
             "height_range_m": [selected_layer * self.layer_step_m, (selected_layer + 1) * self.layer_step_m],
             "layer_step_m": self.layer_step_m,
             "bounds_m": [self.min_east_m, self.max_east_m, self.min_north_m, self.max_north_m],
@@ -282,6 +320,13 @@ class RealtimeSpectrumGrid:
             "latest_timestamp": latest_timestamp or None,
             "reconstruction": reconstruction,
         }
+        with self._lock:
+            if cacheable and self._layer_revisions.get(selected_layer, 0) == revision:
+                self._snapshot_cache[cache_key] = (revision, result)
+                self._snapshot_cache.move_to_end(cache_key)
+                while len(self._snapshot_cache) > _MAX_SNAPSHOT_CACHE_ENTRIES:
+                    self._snapshot_cache.popitem(last=False)
+        return copy.deepcopy(result)
 
     def _cell_position(self, row: int, column: int, layer_index: int) -> tuple[float, float, float]:
         return (
@@ -346,7 +391,7 @@ class RealtimeSpectrumGrid:
             centroid_penalty = 0.035 * math.hypot(
                 source_east - strong_centroid[0],
                 source_north - strong_centroid[1],
-            ) / self.cell_size_m
+            ) / _SOURCE_PRIOR_DISTANCE_SCALE_M
             return robust_rmse + centroid_penalty, slope, intercept
 
         best: tuple[float, float, float, float, float] | None = None

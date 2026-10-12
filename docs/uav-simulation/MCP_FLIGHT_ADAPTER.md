@@ -55,6 +55,8 @@ SPECTRUMCLAW_UAV_MCP_TRANSPORT=streamable-http \
 | MCP Server | 外部 Agent Host 的标准工具发现与调用 | 默认 `stdio`；仅经认证网关或 SSH 隧道启用远程 transport |
 | `UavMissionService` | 唯一的策略门控、PX4 命令和人工接管边界 | 永远是权威实现，不允许被包装层绕过 |
 
+通用知识、搜索和频率规划工具由 `backend.tools.registry` 的统一 `ToolSpec` 经 `backend.tools.mcp_adapter` 自动生成 MCP 表面；UAV MCP 不加入这个通用 Server。飞行工具继续使用独立白名单、资源、提示词和 transport 配置，避免普通工具的暴露策略意外扩大飞控边界。
+
 每个网页任务运行有 `run_id` 与 `trace_id`。`intent`、`policy_decision`、`run_started`、适配层观测、`completion`、`interruption` 事件都会携带这两个关联标识。任务只能终止为 `completed`、`failed`、`cancelled`、`interrupted` 或 `rejected`；编排服务重启会把未完成任务安全标为 `interrupted`，不会遗留伪 `RUNNING` 状态。
 
-下一步扩展新能力时，只需要实现同一任务服务的受限高层方法，再同时登记为内置 Agent tool 与 MCP tool；不得绕过 `UavMissionService` 直连 PX4。
+下一步扩展新能力时，只需要实现同一任务服务的受限高层方法并建立唯一工具契约，再由 Native/MCP 适配器生成所需调用面；不得复制领域逻辑，也不得绕过 `UavMissionService` 直连 PX4。

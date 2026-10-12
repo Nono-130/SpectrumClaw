@@ -36,3 +36,17 @@ def test_mission_author_maps_only_fixed_templates_and_safe_landmarks(tmp_path: P
     assert plan.return_home is True
     with pytest.raises(ValueError, match="无法映射"):
         author.author("run_safe_003", "飞到坐标 123, 456 后以 12m/s 搜寻")
+
+
+def test_mission_author_selects_only_the_fixed_2_4ghz_profile(tmp_path: Path):
+    from backend.agents.uav_operations.mission_author import MissionAuthor
+    from backend.agents.uav_operations.sandbox import MissionSandbox
+
+    author = MissionAuthor(MissionSandbox(tmp_path))
+
+    plan = author.author("run_sionna_001", "请巡检安全周界并采集 2.4GHz 频谱")
+
+    assert plan.template == "inspect_safe_perimeter"
+    assert plan.measurement_profile_id == "sionna_urban_2_4ghz"
+    with pytest.raises(ValueError, match="2.4 GHz"):
+        author.author("run_sionna_002", "请巡检安全周界并采集 5GHz 频谱")

@@ -83,6 +83,34 @@ def test_realtime_sionna_recomputes_after_pose_change_and_publishes_new_ray_endp
     assert measured_positions == [[0.0, 0.0, 3.0], [4.1, 0.0, 3.0]]
 
 
+def test_realtime_sionna_stays_current_within_one_rt_acquisition_cell():
+    from backend.skills.uav_spectrum_sim.sionna_measurement import RealtimeSionnaCoordinator
+
+    class Runner:
+        def measure(self, *, run_id, position_m, timestamp):
+            return {
+                "kind": "spectrum_observation",
+                "source": "sionna_rt",
+                "profile_id": "sionna_urban_2_4ghz",
+                "timestamp": timestamp,
+                "position_m": list(position_m),
+                "frequency_hz": 2.4e9,
+                "anchors": [{"id": "tx-01", "received_power_dbm": -42.0, "path_count": 1, "ray_paths": []}],
+            }
+
+    coordinator = RealtimeSionnaCoordinator(
+        runner=Runner(),
+        executor=_ImmediateExecutor(),
+        time_fn=lambda: 100.0,
+    )
+    coordinator.observe_pose([0.1, 0.1, 21.0], timestamp=100.0)
+
+    live = coordinator.snapshot(_live_runtime([1.1, 0.1, 21.0]))
+
+    assert live["current"] is True
+    assert live["pose_offset_m"] == 1.0
+
+
 def test_grid_trace_positions_covers_every_cell_crossed_by_the_uav_segment():
     from backend.skills.uav_spectrum_sim.realtime_grid import RealtimeSpectrumGrid
 
@@ -476,7 +504,7 @@ def test_default_sionna_runner_uses_the_shared_realtime_worker(monkeypatch, tmp_
 def test_realtime_spectrum_grid_records_total_rf_power_in_the_correct_height_layer():
     from backend.skills.uav_spectrum_sim.realtime_grid import RealtimeSpectrumGrid
 
-    grid = RealtimeSpectrumGrid(area_size_m=120.0, cell_size_m=4.0, layer_step_m=5.0)
+    grid = RealtimeSpectrumGrid()
     observation = {
         "kind": "spectrum_observation",
         "source": "sionna_rt",
@@ -496,18 +524,173 @@ def test_realtime_spectrum_grid_records_total_rf_power_in_the_correct_height_lay
     other_layer = grid.snapshot(layer_index=2, transmitter_id="all")
 
     assert update["layer_index"] == 4
-    assert update["row"] == 15
-    assert update["column"] == 15
-    assert total["shape"] == [30, 30]
+    assert update["row"] == 65
+    assert update["column"] == 65
+    assert total["shape"] == [128, 128]
+    assert total["cell_size_m"] == pytest.approx(0.9375)
     assert total["height_range_m"] == [20.0, 25.0]
-    assert total["values_dbm"][15][15] == pytest.approx(-49.586, abs=0.001)
-    assert tx_one["values_dbm"][15][15] == -50.0
-    assert total["observed_mask"][15][15] == 1
+    assert total["values_dbm"][65][65] == pytest.approx(-49.586, abs=0.001)
+    assert tx_one["values_dbm"][65][65] == -50.0
+    assert total["observed_mask"][65][65] == 1
     assert total["sample_count"] == 1
     assert total["observed_cells"] == 1
-    assert total["coverage_ratio"] == pytest.approx(1 / 900)
+    assert total["coverage_ratio"] == pytest.approx(1 / 16384)
     assert other_layer["observed_cells"] == 0
-    assert other_layer["values_dbm"][15][15] is None
+    assert other_layer["values_dbm"][65][65] is None
+
+
+def test_default_realtime_grid_matches_the_multiband_model_spatial_contract():
+    from backend.skills.spectrum_construction.multiband_rem_contract import DEFAULT_REM_SPEC
+    from backend.skills.uav_spectrum_sim.realtime_grid import RealtimeSpectrumGrid
+
+    grid = RealtimeSpectrumGrid()
+    snapshot = grid.snapshot(layer_index=4)
+
+    assert snapshot["shape"] == [DEFAULT_REM_SPEC.rows, DEFAULT_REM_SPEC.columns] == [128, 128]
+    assert snapshot["bounds_m"] == list(DEFAULT_REM_SPEC.bounds_enu_m)
+    assert snapshot["cell_size_m"] == pytest.approx(DEFAULT_REM_SPEC.cell_size_m[0])
+    assert grid.cell_key([-59.53125, 59.53125, 21.0]) == (4, 0, 0)
+    assert grid.cell_key([59.53125, -59.53125, 21.0]) == (4, 127, 127)
+
+
+def test_default_realtime_grid_traces_every_high_resolution_cell_crossing():
+    from backend.skills.uav_spectrum_sim.realtime_grid import RealtimeSpectrumGrid
+
+    traced = RealtimeSpectrumGrid().trace_positions(
+        [-59.53125, 0.0, 21.0],
+        [59.53125, 0.0, 21.0],
+    )
+
+    assert len(traced) == 128
+    assert [item["column"] for item in traced] == list(range(128))
+    assert {item["layer_index"] for item in traced} == {4}
+
+
+def test_default_coordinator_keeps_rt_acquisition_at_four_meters_on_the_128_grid():
+    from backend.skills.uav_spectrum_sim.sionna_measurement import RealtimeSionnaCoordinator
+
+    measured_positions = []
+
+    class Runner:
+        def measure(self, *, run_id, position_m, timestamp):
+            measured_positions.append(list(position_m))
+            return {
+                "kind": "spectrum_observation",
+                "source": "sionna_rt",
+                "profile_id": "sionna_urban_2_4ghz",
+                "timestamp": timestamp,
+                "position_m": list(position_m),
+                "frequency_hz": 2.4e9,
+                "anchors": [{"id": "tx-01", "received_power_dbm": -45.0, "path_count": 1, "ray_paths": []}],
+            }
+
+    coordinator = RealtimeSionnaCoordinator(
+        runner=Runner(),
+        executor=_ImmediateExecutor(),
+        min_interval_s=0.05,
+        time_fn=lambda: 100.0,
+    )
+
+    coordinator.observe_pose([-59.53125, 0.0, 21.0], timestamp=100.0)
+    coordinator.observe_pose([59.53125, 0.0, 21.0], timestamp=101.0)
+    live = coordinator.snapshot(_live_runtime([59.53125, 0.0, 21.0]))
+    layer = coordinator.grid_snapshot(layer_index=4, transmitter_id="tx-01")
+
+    assert len(measured_positions) == 30
+    assert layer["shape"] == [128, 128]
+    assert layer["observed_cells"] == 30
+    assert live["measurement_queue"]["acquisition_stride_m"] == 4.0
+
+
+def test_high_resolution_snapshot_reuses_reconstruction_until_new_data_arrives(monkeypatch):
+    from backend.skills.uav_spectrum_sim.realtime_grid import RealtimeSpectrumGrid
+
+    grid = RealtimeSpectrumGrid()
+    for index, position in enumerate(([-40.0, -20.0, 21.0], [0.0, 20.0, 21.0], [40.0, -20.0, 21.0]), start=1):
+        grid.record({
+            "timestamp": float(index),
+            "position_m": position,
+            "anchors": [{"id": "tx-01", "received_power_dbm": -65.0 + index}],
+        })
+    reconstruct = grid._blind_path_loss_idw_reconstruct
+    calls = []
+
+    def counted_reconstruct(*args, **kwargs):
+        calls.append(True)
+        return reconstruct(*args, **kwargs)
+
+    monkeypatch.setattr(grid, "_blind_path_loss_idw_reconstruct", counted_reconstruct)
+
+    first = grid.snapshot(layer_index=4, transmitter_id="tx-01")
+    second = grid.snapshot(layer_index=4, transmitter_id="tx-01")
+    grid.record({
+        "timestamp": 4.0,
+        "position_m": [20.0, 40.0, 21.0],
+        "anchors": [{"id": "tx-01", "received_power_dbm": -58.0}],
+    })
+    third = grid.snapshot(layer_index=4, transmitter_id="tx-01")
+
+    assert first == second
+    assert first["revision"] == 3
+    assert third["revision"] == 4
+    assert len(calls) == 2
+
+
+def test_snapshot_cache_keeps_the_global_transmitter_catalog_current_across_layers():
+    from backend.skills.uav_spectrum_sim.realtime_grid import RealtimeSpectrumGrid
+
+    grid = RealtimeSpectrumGrid(area_size_m=12.0, cell_size_m=4.0, layer_step_m=5.0)
+    grid.record({
+        "timestamp": 1.0,
+        "position_m": [0.0, 0.0, 16.0],
+        "anchors": [{"id": "tx-01", "received_power_dbm": -50.0}],
+    })
+    first = grid.snapshot(layer_index=4)
+    grid.record({
+        "timestamp": 2.0,
+        "position_m": [0.0, 0.0, 16.0],
+        "anchors": [{"id": "tx-02", "received_power_dbm": -55.0}],
+    })
+    second = grid.snapshot(layer_index=4)
+
+    assert first["available_transmitters"] == ["tx-01"]
+    assert second["available_transmitters"] == ["tx-01", "tx-02"]
+
+
+def test_unknown_transmitter_queries_do_not_grow_the_snapshot_cache():
+    from backend.skills.uav_spectrum_sim.realtime_grid import RealtimeSpectrumGrid
+
+    grid = RealtimeSpectrumGrid()
+
+    for index in range(20):
+        snapshot = grid.snapshot(layer_index=4, transmitter_id=f"unknown-{index}")
+        assert snapshot["observed_cells"] == 0
+
+    assert grid._snapshot_cache == {}
+
+
+def test_snapshot_cache_is_bounded_across_many_layers():
+    from backend.skills.uav_spectrum_sim.realtime_grid import RealtimeSpectrumGrid
+
+    grid = RealtimeSpectrumGrid()
+
+    for layer_index in range(20):
+        grid.snapshot(layer_index=layer_index)
+
+    assert len(grid._snapshot_cache) == 12
+    assert (0, "all") not in grid._snapshot_cache
+    assert (19, "all") in grid._snapshot_cache
+
+
+def test_invalid_rt_acquisition_stride_is_rejected_before_any_grid_write():
+    from backend.skills.uav_spectrum_sim.sionna_measurement import RealtimeSionnaCoordinator
+
+    with pytest.raises(ValueError, match="整除"):
+        RealtimeSionnaCoordinator(
+            runner=object(),
+            executor=_ImmediateExecutor(),
+            acquisition_stride_m=7.0,
+        )
 
 
 def test_realtime_sionna_coordinator_updates_the_sparse_grid_with_each_completed_sample():

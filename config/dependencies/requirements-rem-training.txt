@@ -1,0 +1,7 @@
+# Dedicated environment for multi-band REM training/inference.
+# Keep torch out of the main FastAPI/Sionna flight-control process.
+numpy>=2.0,<3
+scipy>=1.15,<2
+PyYAML>=6.0
+torch>=2.6,<3
+pytest>=8.3,<9

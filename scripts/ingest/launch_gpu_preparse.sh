@@ -2,7 +2,7 @@
 # Launch GPU-accelerated MinerU preparse workers on both GPUs.
 # Replaces the old CPU-bound subprocess-per-file approach.
 #
-# Usage: bash scripts/launch_gpu_preparse.sh [--force]
+# Usage: bash scripts/ingest/launch_gpu_preparse.sh [--force]
 
 set -euo pipefail
 cd /workspace/YiFan/SpectrumClaw

@@ -8,10 +8,10 @@ Supports dual-GPU via --shards/--shard-index or CUDA_VISIBLE_DEVICES.
 
 Usage:
     # GPU 0 (first half)
-    CUDA_VISIBLE_DEVICES=0 MINERU_MODEL_SOURCE=local python scripts/batch_mineru_parse.py --shards 2 --shard-index 0
+    CUDA_VISIBLE_DEVICES=0 MINERU_MODEL_SOURCE=local python scripts/ingest/batch_mineru_parse.py --shards 2 --shard-index 0
 
     # GPU 1 (second half)
-    CUDA_VISIBLE_DEVICES=1 MINERU_MODEL_SOURCE=local python scripts/batch_mineru_parse.py --shards 2 --shard-index 1
+    CUDA_VISIBLE_DEVICES=1 MINERU_MODEL_SOURCE=local python scripts/ingest/batch_mineru_parse.py --shards 2 --shard-index 1
 """
 
 import argparse
@@ -22,7 +22,7 @@ import sys
 import time
 from pathlib import Path
 
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
 PDF_DIR = PROJECT_ROOT / "data" / "knowledge_base" / "raw"
 OUTPUT_DIR = PROJECT_ROOT / "data" / "parsed"
 

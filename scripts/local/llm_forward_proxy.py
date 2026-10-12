@@ -9,8 +9,8 @@ It transparently forwards any path to UPSTREAM, preserving method, body, and
 the Authorization header, and streams the response back (SSE-friendly).
 
 Run:
-    python scripts/llm_forward_proxy.py            # default 127.0.0.1:8240 -> api.deepseek.com
-    UPSTREAM=https://api.deepseek.com PORT=8240 python scripts/llm_forward_proxy.py
+    python scripts/local/llm_forward_proxy.py            # default 127.0.0.1:8240 -> api.deepseek.com
+    UPSTREAM=https://api.deepseek.com PORT=8240 python scripts/local/llm_forward_proxy.py
 """
 
 from __future__ import annotations

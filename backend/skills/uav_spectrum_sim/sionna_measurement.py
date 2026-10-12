@@ -18,8 +18,11 @@ from concurrent.futures import Future, ThreadPoolExecutor
 from pathlib import Path
 from typing import Any
 
+from ..spectrum_construction.spatial_grid import SPECTRUM_RT_ACQUISITION_STRIDE_M
+
 
 MEASUREMENT_PROFILE_ID = "sionna_urban_2_4ghz"
+DEFAULT_RT_ACQUISITION_STRIDE_M = SPECTRUM_RT_ACQUISITION_STRIDE_M
 DEFAULT_RUNTIME_ROOT = Path("/workspace/YiFan/spectrumclaw_runtime")
 DEFAULT_SIDECAR = Path("simulation/rf_engine/sionna_measurement_sidecar.py")
 _RUN_ID = re.compile(r"^[A-Za-z0-9_-]{3,96}$")
@@ -272,11 +275,12 @@ atexit.register(_close_worker_clients)
 
 
 class RealtimeSionnaCoordinator:
-    """Queue one real RT solve for every grid cell crossed by the UAV.
+    """Queue real RT solves on a bounded physical sampling stride.
 
     Pose observation stays non-blocking. A single background worker drains the
-    ordered, de-duplicated cell queue, preserving the complete measurement
-    footprint without coupling flight control to Sionna latency.
+    ordered, de-duplicated acquisition queue. Measurements are projected into
+    the finer spectrum-output grid, so display resolution never silently
+    multiplies expensive Sionna calls.
     """
 
     def __init__(
@@ -285,6 +289,7 @@ class RealtimeSionnaCoordinator:
         runner: "SionnaMeasurementRunner | None" = None,
         executor: Any | None = None,
         spectrum_grid: Any | None = None,
+        acquisition_stride_m: float | None = None,
         movement_threshold_m: float = 0.5,
         min_interval_s: float = 0.4,
         max_measurement_attempts: int = 3,
@@ -293,10 +298,35 @@ class RealtimeSionnaCoordinator:
         self._runner = runner or SionnaMeasurementRunner()
         self._executor = executor or ThreadPoolExecutor(max_workers=1, thread_name_prefix="sionna-realtime")
         self._owns_executor = executor is None
-        if spectrum_grid is None:
-            from .realtime_grid import RealtimeSpectrumGrid
+        from .realtime_grid import RealtimeSpectrumGrid
+        uses_default_grid = spectrum_grid is None
+        if uses_default_grid:
             spectrum_grid = RealtimeSpectrumGrid()
         self._spectrum_grid = spectrum_grid
+        selected_stride = (
+            DEFAULT_RT_ACQUISITION_STRIDE_M
+            if acquisition_stride_m is None and uses_default_grid
+            else float(acquisition_stride_m if acquisition_stride_m is not None else spectrum_grid.cell_size_m)
+        )
+        if not math.isfinite(selected_stride) or selected_stride <= 0:
+            raise ValueError("Sionna RT 采样步长必须为有限正数")
+        acquisition_cells = int(round(float(spectrum_grid.area_size_m) / selected_stride))
+        if acquisition_cells < 1 or not math.isclose(
+            acquisition_cells * selected_stride,
+            float(spectrum_grid.area_size_m),
+            abs_tol=1e-6,
+        ):
+            raise ValueError("Sionna RT 采样步长必须整除频谱场景边长")
+        self._acquisition_stride_m = selected_stride
+        self._acquisition_grid = (
+            spectrum_grid
+            if math.isclose(selected_stride, float(spectrum_grid.cell_size_m), abs_tol=1e-9)
+            else RealtimeSpectrumGrid(
+                area_size_m=float(spectrum_grid.area_size_m),
+                cell_size_m=selected_stride,
+                layer_step_m=float(spectrum_grid.layer_step_m),
+            )
+        )
         self._movement_threshold_m = max(0.05, float(movement_threshold_m))
         self._min_interval_s = max(0.05, float(min_interval_s))
         self._max_measurement_attempts = max(1, int(max_measurement_attempts))
@@ -321,6 +351,10 @@ class RealtimeSionnaCoordinator:
         self._last_grid_update: dict[str, Any] | None = None
 
     def _accept_observation_locked(self, observation: dict[str, Any]) -> None:
+        position = list(observation.get("position_m") or [])
+        cell_key = self._acquisition_grid.cell_key(position)
+        if cell_key is None:
+            raise ValueError("Sionna RT 观测位姿不在采样区域内")
         try:
             grid_update = self._spectrum_grid.record(observation)
         except ValueError as exc:
@@ -330,11 +364,6 @@ class RealtimeSionnaCoordinator:
         self._latest = observation
         self._sequence += 1
         self._last_grid_update = grid_update
-        cell_key = (
-            int(self._last_grid_update["layer_index"]),
-            int(self._last_grid_update["row"]),
-            int(self._last_grid_update["column"]),
-        )
         self._measured_cells.add(cell_key)
         self._scheduled_cells.discard(cell_key)
         self._failed_cells.pop(cell_key, None)
@@ -406,7 +435,7 @@ class RealtimeSionnaCoordinator:
 
     def _enqueue_trace_locked(self, position: list[float], timestamp: float) -> int:
         start = self._last_telemetry_position or list(position)
-        traced = self._spectrum_grid.trace_positions(start, position)
+        traced = self._acquisition_grid.trace_positions(start, position)
         self._last_telemetry_position = list(position)
         added = 0
         for item in traced:
@@ -514,6 +543,8 @@ class RealtimeSionnaCoordinator:
             failed = [dict(item) for item in self._failed_cells.values()]
             queue_status = {
                 "strategy": "grid_crossing_fifo",
+                "coordinate_space": "rt_acquisition",
+                "acquisition_stride_m": self._acquisition_stride_m,
                 "pending": len(self._scheduled_cells),
                 "tracked_cells": len(self._scheduled_cells | self._measured_cells | set(self._failed_cells)),
                 "measured_cells": len(self._measured_cells),
@@ -526,8 +557,8 @@ class RealtimeSionnaCoordinator:
             if current_position is not None and isinstance(observed_position, list) else None
         )
         captured_at = float(observation.get("timestamp", 0)) if observation else None
-        observed_cell = self._spectrum_grid.cell_key(list(observed_position)) if isinstance(observed_position, list) else None
-        current_cell = self._spectrum_grid.cell_key(current_position) if current_position is not None else None
+        observed_cell = self._acquisition_grid.cell_key(list(observed_position)) if isinstance(observed_position, list) else None
+        current_cell = self._acquisition_grid.cell_key(current_position) if current_position is not None else None
         return {
             "available": observation is not None,
             "current": bool(observed_cell is not None and observed_cell == current_cell),
@@ -584,7 +615,10 @@ class RealtimeSionnaCoordinator:
                 if int(item.get("grid_update", {}).get("layer_index", -1)) != selected_layer
             ]
             if self._last_telemetry_position is not None:
-                traced = self._spectrum_grid.trace_positions(self._last_telemetry_position, self._last_telemetry_position)
+                traced = self._acquisition_grid.trace_positions(
+                    self._last_telemetry_position,
+                    self._last_telemetry_position,
+                )
                 if traced and int(traced[0]["layer_index"]) == selected_layer:
                     self._last_telemetry_position = None
 

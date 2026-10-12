@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { applySpectrumGridUpdate, isMeasuredSpectrumValue, spectrumColorRange, spectrumEstimatedSources, spectrumGridCells, spectrumMeasurementTrack } from "../src/lib/spectrumGrid.js";
+import { applySpectrumGridUpdate, isMeasuredSpectrumValue, spectrumColorRange, spectrumEstimatedSources, spectrumGridCells, spectrumGridRaster, spectrumMeasurementTrack } from "../src/lib/spectrumGrid.js";
 
 
 function emptyGrid() {
@@ -15,6 +15,8 @@ function emptyGrid() {
     observed_cells: 0,
     sample_count: 0,
     coverage_ratio: 0,
+    min_dbm: null,
+    max_dbm: null,
   };
 }
 
@@ -35,6 +37,8 @@ test("live grid update fills the measured cell and preserves unknown cells", () 
   assert.equal(next.observed_cells, 1);
   assert.equal(next.sample_count, 1);
   assert.equal(next.coverage_ratio, 0.25);
+  assert.equal(next.min_dbm, -48.25);
+  assert.equal(next.max_dbm, -48.25);
   assert.equal(current.values_dbm[1][0], null);
 });
 
@@ -118,4 +122,53 @@ test("blind source markers come only from reconstruction estimates", () => {
     { id: "tx-01", position_m: [38, 6, 22.5], rmse_db: 1.2, confidence: 0.7 },
   ]);
   assert.equal(spectrumEstimatedSources({}, "all").length, 0);
+});
+
+test("128 by 128 spectrum layers are converted into one canvas raster", () => {
+  const rows = 128;
+  const columns = 128;
+  const values = Array.from({ length: rows }, () => Array(columns).fill(null));
+  const mask = Array.from({ length: rows }, () => Array(columns).fill(0));
+  values[65][65] = -48.0;
+  mask[65][65] = 1;
+
+  const raster = spectrumGridRaster({
+    shape: [rows, columns],
+    values_dbm: values,
+    observed_mask: mask,
+  }, { min: -95, max: -30 });
+
+  assert.equal(raster.rows, 128);
+  assert.equal(raster.columns, 128);
+  assert.equal(raster.pixels.length, 128 * 128 * 4);
+  assert.equal(raster.hasValues, true);
+  assert.ok(raster.pixels[(65 * 128 + 65) * 4 + 3] > raster.pixels[3]);
+});
+
+test("a new online sample preserves the last dense layer but marks it stale", () => {
+  const current = {
+    ...emptyGrid(),
+    values_dbm: [[-50, null], [null, null]],
+    counts: [[1, 0], [0, 0]],
+    observed_mask: [[1, 0], [0, 0]],
+    observed_cells: 1,
+    sample_count: 1,
+    reconstructed_values_dbm: [[-50, -55], [-60, -65]],
+    reconstruction: { ready: true, method: "blind_path_loss_idw" },
+  };
+
+  const next = applySpectrumGridUpdate(current, {
+    layer_index: 4,
+    row: 1,
+    column: 1,
+    values_dbm: { all: -45.0 },
+  });
+
+  assert.equal(next.reconstruction.ready, false);
+  assert.equal(next.reconstruction.stale, true);
+  assert.equal(next.reconstructed_values_dbm[1][1], -45.0);
+  assert.equal(next.reconstructed_values_dbm[0][1], -55.0);
+  const cells = spectrumGridCells(next);
+  assert.equal(cells.length, 4);
+  assert.equal(cells.find((cell) => cell.row === 1 && cell.column === 1).measured, true);
 });

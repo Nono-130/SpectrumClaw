@@ -725,6 +725,13 @@ export default function UavSpectrumSimPage({ active = true, onBack, onOpenSystem
         .map((item) => item.grid_update)
         .filter(Boolean)
       : [live.grid_update];
+    if (previousSequence > 0 && sequence - previousSequence > unseenUpdates.length) {
+      void loadSpectrumGrid(
+        followSpectrumHeight ? Number(live.grid_update.layer_index) : spectrumLayer,
+        selectedTransmitter,
+      );
+      return;
+    }
     const newestUpdate = unseenUpdates.at(-1) || live.grid_update;
     if (followSpectrumHeight && Number(newestUpdate.layer_index) !== spectrumLayer) {
       setSpectrumLayer(Number(newestUpdate.layer_index));
@@ -733,16 +740,16 @@ export default function UavSpectrumSimPage({ active = true, onBack, onOpenSystem
       (next, update) => applySpectrumGridUpdate(next, update),
       current,
     ));
-  }, [followSpectrumHeight, liveSnapshot?.spectrum, spectrumLayer]);
+  }, [followSpectrumHeight, liveSnapshot?.spectrum, loadSpectrumGrid, selectedTransmitter, spectrumLayer]);
 
   useEffect(() => {
     const survey = liveSnapshot?.spectrum_survey;
     if (!survey) return;
     setSpectrumSurvey(survey);
-    const refreshKey = `${survey.campaign_id || "idle"}:${survey.samples_collected || 0}:${survey.state || "idle"}`;
+    const refreshKey = `${survey.campaign_id || "idle"}:${survey.state || "idle"}`;
     if (refreshKey === liveSurveyRefreshRef.current) return;
     liveSurveyRefreshRef.current = refreshKey;
-    if (Number(survey.samples_collected || 0) > 0 || survey.state === "completed") {
+    if (survey.state === "running" || survey.state === "completed") {
       void loadSpectrumGrid(4, selectedTransmitter);
     }
   }, [liveSnapshot?.spectrum_survey, loadSpectrumGrid, selectedTransmitter]);

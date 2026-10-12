@@ -3426,7 +3426,9 @@
 .uav-spectrum-layer-buttons button { display: grid; min-width: 48px; line-height: 1.05; }
 .uav-spectrum-layer-buttons small { color: var(--muted-2); font-size: 6.8px; }
 .uav-spectrum-layer-canvas { position: relative; min-height: 460px; overflow: hidden; border: 1px solid oklch(0.78 0.13 205 / .25); border-radius: 7px; background: #07121b; box-shadow: inset 0 0 42px oklch(0.78 0.13 205 / .05); }
-.uav-spectrum-layer-canvas > svg { display: block; width: 100%; height: 100%; min-height: 460px; }
+.uav-spectrum-layer-canvas > svg { position: relative; z-index: 1; display: block; width: 100%; height: 100%; min-height: 460px; }
+.uav-rem-raster { position: absolute; z-index: 0; inset: 0; width: 100%; height: 100%; object-fit: contain; image-rendering: auto; pointer-events: none; }
+.uav-rem-raster.is-mini { height: 152px; }
 .uav-rem-unknown { fill: oklch(0.08 0.022 235); }
 .uav-rem-grid-lines { color: oklch(0.75 0.08 205 / .22); pointer-events: none; }
 .uav-rem-measured-cell { stroke: oklch(0.98 0 0 / .08); stroke-width: .08; transition: fill 180ms linear; }
@@ -3468,7 +3470,7 @@
 .uav-spectrum-inspector-head h2 { display: flex; align-items: center; gap: 6px; margin: 3px 0 0; color: var(--ink); font-size: 14px; }
 .uav-spectrum-inspector-head h2 svg { color: oklch(0.83 0.14 75); }
 .uav-spectrum-mini-map { position: relative; min-height: 152px; overflow: hidden; border: 1px solid oklch(0.78 0.13 205 / .24); border-radius: 6px; background: #07121b; }
-.uav-spectrum-mini-map > svg { display: block; width: 100%; height: 152px; }
+.uav-spectrum-mini-map > svg { position: relative; z-index: 1; display: block; width: 100%; height: 152px; }
 .uav-spectrum-mini-map > span { position: absolute; bottom: 6px; display: inline-flex; align-items: center; gap: 4px; padding: 3px 5px; border: 1px solid oklch(0.78 0.13 205 / .2); border-radius: 4px; background: oklch(0.07 0.02 230 / .8); color: oklch(0.85 0.10 205); font: 8px var(--font-mono); }
 .uav-spectrum-mini-map > span:first-of-type { left: 6px; }
 .uav-spectrum-mini-map > span:last-of-type { right: 6px; color: oklch(0.9 0.13 80); }

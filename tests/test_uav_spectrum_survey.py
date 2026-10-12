@@ -154,7 +154,7 @@ def test_default_survey_route_only_revisits_the_launch_cell_for_safe_return():
 
     service = SpectrumSurveyService(status_reader=running_status, executor=ImmediateExecutor())
     status = service.snapshot()
-    grid = RealtimeSpectrumGrid()
+    grid = RealtimeSpectrumGrid(area_size_m=120.0, cell_size_m=4.0, layer_step_m=5.0)
     cells = []
     current = [0.0, 0.0, SURVEY_ALTITUDE_M]
     for waypoint in status["route_waypoints_m"]:
@@ -172,6 +172,8 @@ def test_default_survey_route_only_revisits_the_launch_cell_for_safe_return():
     assert status["planned_route_coverage"]["revisit_steps"] == 1
     assert status["planned_route_coverage"]["revisited_cells"] == 1
     assert status["planned_route_coverage"]["unique_cells"] == len(set(cells))
+    assert status["planned_route_coverage"]["coordinate_space"] == "rt_acquisition"
+    assert status["planned_route_coverage"]["cell_size_m"] == 4.0
     assert cells[-1] == cells[0]
     assert len(cells) - len(set(cells)) == 1
 

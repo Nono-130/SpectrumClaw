@@ -137,7 +137,7 @@ def test_astar_soft_revisit_penalty_still_uses_an_old_cell_when_unavoidable():
     assert set(_route_cells(start=start, route=route, origin_m=origin)).issubset(visited_cells)
 
 
-def test_coverage_cell_keys_match_the_live_realtime_grid_contract():
+def test_coverage_cell_keys_match_the_live_rt_acquisition_stride():
     from backend.skills.uav_spectrum_sim.realtime_grid import RealtimeSpectrumGrid
     from backend.skills.uav_spectrum_sim.route_planner import coverage_cell_key
 
