@@ -33,10 +33,12 @@ def test_survey_flies_the_fixed_layer_route_and_feeds_idw_reconstruction():
     grid = RealtimeSpectrumGrid(area_size_m=12.0, cell_size_m=4.0, layer_step_m=5.0)
 
     drain_calls = []
+    begun_layers = []
 
     class Coordinator:
-        def clear_grid_layer(self, layer_index):
-            grid.clear_layer(layer_index)
+        def begin_layer_survey(self, layer_index):
+            begun_layers.append(layer_index)
+            grid.clear_all_layers()
 
         def ingest_observation(self, observation):
             grid.record(observation)
@@ -98,7 +100,34 @@ def test_survey_flies_the_fixed_layer_route_and_feeds_idw_reconstruction():
     assert status["planned_waypoints"] == 7
     assert status["reconstruction_ready"] is True
     assert status["reconstruction_method"] == "blind_path_loss_idw"
+    assert begun_layers == [4]
     assert drain_calls == [(120.0, 4)]
+
+
+def test_survey_measurement_runner_skips_samples_outside_the_selected_layer():
+    from backend.skills.uav_spectrum_sim.spectrum_survey import _CampaignMeasurementRunner
+
+    measured = []
+    ingested = []
+    counted = []
+
+    class Runner:
+        def measure(self, *, run_id, position_m, timestamp):
+            measured.append(list(position_m))
+            return {"position_m": list(position_m)}
+
+    class Coordinator:
+        def ingest_observation(self, observation):
+            ingested.append(observation)
+
+    runner = _CampaignMeasurementRunner(Runner(), Coordinator(), counted.append)
+    with pytest.raises(ValueError, match="Z4"):
+        runner.measure(run_id="below-boundary", position_m=[0.0, 0.0, 19.9], timestamp=100.0)
+    observation = runner.measure(run_id="in-layer", position_m=[0.0, 0.0, 21.0], timestamp=101.0)
+
+    assert measured == [[0.0, 0.0, 21.0]]
+    assert ingested == [observation]
+    assert counted == [observation]
 
 
 def test_survey_rejects_start_while_browser_manual_control_is_active():

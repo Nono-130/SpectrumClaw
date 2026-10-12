@@ -339,6 +339,7 @@ class RealtimeSionnaCoordinator:
         self._measured_cells: set[tuple[int, int, int]] = set()
         self._failed_cells: dict[tuple[int, int, int], dict[str, Any]] = {}
         self._layer_generations: dict[int, int] = {}
+        self._collection_layer_index: int | None = None
         self._last_telemetry_position: list[float] | None = None
         self._measurement_track: list[dict[str, Any]] = []
         self._measurement_index = 0
@@ -355,6 +356,8 @@ class RealtimeSionnaCoordinator:
         cell_key = self._acquisition_grid.cell_key(position)
         if cell_key is None:
             raise ValueError("Sionna RT 观测位姿不在采样区域内")
+        if self._collection_layer_index is not None and cell_key[0] != self._collection_layer_index:
+            raise ValueError(f"当前任务只接受 Z{self._collection_layer_index} 高度层观测")
         try:
             grid_update = self._spectrum_grid.record(observation)
         except ValueError as exc:
@@ -408,6 +411,7 @@ class RealtimeSionnaCoordinator:
             raise ValueError("当前无人机位姿不在实时频谱网格范围内")
         layer_index = int(cell_key[0])
         with self._lock:
+            self._layer_generations.setdefault(layer_index, 0)
             return {
                 "layer_index": layer_index,
                 "generation": self._layer_generations.get(layer_index, 0),
@@ -434,7 +438,22 @@ class RealtimeSionnaCoordinator:
             self._accept_observation_locked(observation)
 
     def _enqueue_trace_locked(self, position: list[float], timestamp: float) -> int:
-        start = self._last_telemetry_position or list(position)
+        current_cell = self._acquisition_grid.cell_key(position)
+        if self._collection_layer_index is not None:
+            if current_cell is None or current_cell[0] != self._collection_layer_index:
+                self._last_telemetry_position = None
+                return 0
+            previous_cell = (
+                self._acquisition_grid.cell_key(self._last_telemetry_position)
+                if self._last_telemetry_position is not None else None
+            )
+            start = (
+                self._last_telemetry_position
+                if previous_cell is not None and previous_cell[0] == self._collection_layer_index
+                else list(position)
+            )
+        else:
+            start = self._last_telemetry_position or list(position)
         traced = self._acquisition_grid.trace_positions(start, position)
         self._last_telemetry_position = list(position)
         added = 0
@@ -538,6 +557,7 @@ class RealtimeSionnaCoordinator:
             target_position = list(self._target_position) if self._target_position is not None else None
             sequence = self._sequence
             error = self._error
+            collection_layer_index = self._collection_layer_index
             grid_update = dict(self._last_grid_update) if self._last_grid_update is not None else None
             measurement_track = [dict(item) for item in self._measurement_track]
             failed = [dict(item) for item in self._failed_cells.values()]
@@ -563,6 +583,7 @@ class RealtimeSionnaCoordinator:
             "available": observation is not None,
             "current": bool(observed_cell is not None and observed_cell == current_cell),
             "profile_id": MEASUREMENT_PROFILE_ID,
+            "collection_layer_index": collection_layer_index,
             "sequence": sequence,
             "computing": computing,
             "target_position_m": target_position,
@@ -621,6 +642,29 @@ class RealtimeSionnaCoordinator:
                 )
                 if traced and int(traced[0]["layer_index"]) == selected_layer:
                     self._last_telemetry_position = None
+
+    def begin_layer_survey(self, layer_index: int) -> None:
+        """Keep a survey's samples in one height layer, including during ascent."""
+        selected_layer = max(0, int(layer_index))
+        with self._lock:
+            known_layers = {selected_layer, *self._layer_generations}
+            known_layers.update(cell[0] for cell in self._scheduled_cells | self._measured_cells | set(self._failed_cells))
+            for known_layer in known_layers:
+                self._layer_generations[known_layer] = self._layer_generations.get(known_layer, 0) + 1
+            self._collection_layer_index = selected_layer
+            self._spectrum_grid.clear_all_layers()
+            self._measurement_queue.clear()
+            self._scheduled_cells.clear()
+            self._measured_cells.clear()
+            self._failed_cells.clear()
+            self._measurement_track.clear()
+            self._latest = None
+            self._last_grid_update = None
+            self._last_telemetry_position = None
+            self._target_position = None
+            self._target_cell_key = None
+            self._last_requested_at = float("-inf")
+            self._error = ""
 
     def close(self) -> None:
         if self._owns_executor:

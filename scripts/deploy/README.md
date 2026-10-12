@@ -17,6 +17,25 @@
 
 这些脚本包含具体机器路径和端口约定，迁移到新服务器前应先审查变量。
 
+## AutoDL 当前实例
+
+服务器代码位于 `/root/workspace/SpectrumClaw`，日志与运行状态位于数据盘
+`/root/autodl-tmp/spectrumclaw`。构建前端时使用 `VITE_API_BASE='' npm --prefix frontend run build`，
+生产页面与 API 均由后端固定在 `0.0.0.0:8230` 提供。`scripts/server_backend_guard.sh`
+会接管已运行的后端，并在后端异常退出后使用同一端口重新启动。
+
+本实例的 `/init/bin/customer.cmd.sh` 在开机时执行 `/etc/autodl.sh`。将以下内容放入
+`/etc/autodl.sh` 即可在开机后启动守护脚本：
+
+```bash
+#!/usr/bin/env bash
+setsid -f /root/workspace/SpectrumClaw/scripts/server_backend_guard.sh \
+  </dev/null >/root/autodl-tmp/spectrumclaw/logs/backend-guard-launch.log 2>&1
+```
+
+客户端如通过 SSH 访问，可固定转发 `-L 8230:127.0.0.1:8230`，之后一直使用
+`http://127.0.0.1:8230/`。网络切换只需重连 SSH；服务器端口无需改变。
+
 本机稳定运行可执行 `bash scripts/local/install_user_services.sh`。本地用户已启用 linger，服务会在退出、终端关闭和重新登录后自动拉起。若需要临时本地 Vite 开发页，执行 `ENABLE_LOCAL_FRONTEND=1 bash scripts/local/install_user_services.sh`。
 
 ## 服务器同源访问
@@ -27,4 +46,4 @@
 http://<本机可达IP>:8230/
 ```
 
-端口 `8230` 由本机 systemd 链路固定监听；当前可用地址为 `http://192.168.139.129:8230/`。网络切换后 IP 可能变化，但端口和服务不变，脚本会输出新的本机 IP。服务器公网地址 `http://<服务器IP>:8230/` 只有在上游网络/安全组开放 TCP `8230` 时才可直接使用。
+端口 `8230` 由本机 systemd 链路固定监听；网络切换后 IP 可能变化，但端口和服务不变，脚本会输出新的本机 IP。服务器公网地址 `http://<服务器IP>:8230/` 只有在上游网络/安全组开放 TCP `8230` 时才可直接使用。

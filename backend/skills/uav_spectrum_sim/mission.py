@@ -75,6 +75,7 @@ class UavMissionService:
         sleep: Callable[[float], None] = time.sleep,
         poll_interval_s: float = 0.25,
         arrival_timeout_s: float = 35.0,
+        takeoff_timeout_s: float | None = None,
     ) -> None:
         self._status_reader = status_reader
         self._command_executor = command_executor
@@ -84,6 +85,10 @@ class UavMissionService:
         self._sleep = sleep
         self._poll_interval_s = poll_interval_s
         self._arrival_timeout_s = arrival_timeout_s
+        self._takeoff_timeout_s = max(
+            self._arrival_timeout_s,
+            float(takeoff_timeout_s) if takeoff_timeout_s is not None else self._arrival_timeout_s,
+        )
         self._policy = policy or MissionPolicy()
         self._measurement_runner = measurement_runner
         self._safe_perimeter_route = tuple(tuple(float(value) for value in point) for point in safe_perimeter_route)
@@ -178,7 +183,7 @@ class UavMissionService:
         return status, None
 
     def _wait_for_altitude(self, altitude_m: float) -> str:
-        deadline = time.monotonic() + self._arrival_timeout_s
+        deadline = time.monotonic() + self._takeoff_timeout_s
         tolerance_m = max(0.35, altitude_m * 0.12)
         while time.monotonic() <= deadline:
             status = self._status_reader()

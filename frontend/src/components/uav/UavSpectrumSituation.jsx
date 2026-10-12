@@ -1,6 +1,7 @@
 import { Activity, CircleDot, Clock3, Crosshair, Layers3, Map as MapIcon, Radio, RefreshCw, Route, Signal, Zap } from "lucide-react";
 import { useMemo } from "react";
 import SpectrumGridCanvas from "./SpectrumGridCanvas.jsx";
+import { spectrumColorRange } from "../../lib/spectrumGrid.js";
 
 const MAP_RANGE_M = 60;
 const RAY_COLORS = ["#f7c948", "#48d8ff", "#b787ff", "#ff7a9f", "#64e7a3", "#ff9f43", "#83a7ff"];
@@ -87,7 +88,7 @@ export default function UavSpectrumSituation({ scene, vehicle, situation, grid, 
       </div>
 
       <div className="uav-spectrum-mini-map" role="img" aria-label="无人机与发射源的二维频谱态势概览">
-        <SpectrumGridCanvas grid={grid} colorRange={{ min: -95, max: -30 }} className="is-mini" />
+        <SpectrumGridCanvas grid={grid} colorRange={spectrumColorRange(grid)} className="is-mini" />
         <svg viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet">
           <defs><pattern id="rf-mini-grid" width="10" height="10" patternUnits="userSpaceOnUse"><path d="M10 0H0V10" fill="none" stroke="currentColor" strokeWidth=".35" /></pattern></defs>
           <rect className="uav-spectrum-ground" width="100" height="100" rx="3" />

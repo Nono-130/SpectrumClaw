@@ -701,8 +701,8 @@ export default function UavSpectrumSimPage({ active = true, onBack, onOpenSystem
     const isNewSample = sequence > liveSpectrumSequenceRef.current && Boolean(live.observation);
     if (isNewSample) liveSpectrumSequenceRef.current = sequence;
     setSpectrumSituation((current) => {
-      const observation = live.observation || current?.observation;
-      const history = [...(current?.history || [])];
+      const observation = Object.hasOwn(live, "observation") ? live.observation : current?.observation;
+      const history = observation ? [...(current?.history || [])] : [];
       if (isNewSample && live.observation) {
         history.unshift({
           run_id: `sionna-realtime-${sequence}`,

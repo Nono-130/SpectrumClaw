@@ -14,7 +14,7 @@ from ..spectrum_construction.spatial_grid import SPECTRUM_RT_ACQUISITION_STRIDE_
 from .contracts import MissionPlan
 from .mission import UavMissionService
 from .route_planner import Point3, plan_obstacle_aware_route, route_coverage_metrics
-from .runtime import get_runtime_status, scene_definition
+from .runtime import get_runtime_status, scene_definition, write_agent_navigation_target
 from .sionna_measurement import (
     MEASUREMENT_PROFILE_ID,
     SionnaMeasurementRunner,
@@ -44,6 +44,12 @@ class _CampaignMeasurementRunner:
         self._on_sample = on_sample
 
     def measure(self, *, run_id: str, position_m: list[float], timestamp: float) -> dict[str, Any]:
+        try:
+            altitude_m = float(position_m[2])
+        except (IndexError, TypeError, ValueError) as exc:
+            raise ValueError("无人机位姿缺少有效高度") from exc
+        if not math.isfinite(altitude_m) or not SURVEY_HEIGHT_RANGE_M[0] <= altitude_m < SURVEY_HEIGHT_RANGE_M[1]:
+            raise ValueError("无人机尚未进入 Z4 采样高度层")
         observation = self._delegate.measure(run_id=run_id, position_m=position_m, timestamp=timestamp)
         self._coordinator.ingest_observation(observation)
         self._on_sample(observation)
@@ -170,6 +176,15 @@ class SpectrumSurveyService:
             self._make_mission_service(self._mission_service_factory, runner, survey_route)
             if self._mission_service_factory is not None
             else UavMissionService(
+                # Sionna work is interleaved with flight progress updates. Give
+                # each survey leg a larger but still bounded window, and keep
+                # the validated PX4 target alive until that window closes.
+                arrival_timeout_s=45.0,
+                takeoff_timeout_s=150.0,
+                navigation_writer=lambda target: write_agent_navigation_target(
+                    target,
+                    expires_in_s=60.0,
+                ),
                 measurement_runner=runner,
                 safe_perimeter_route=survey_route,
                 position_observer=lambda position: coordinator.observe_pose(position),
@@ -244,7 +259,12 @@ class SpectrumSurveyService:
                 "started_at": float(self._time_fn()),
                 "message": f"无人机将飞往 Z4 高度层，并沿 {len(survey_route)} 个 A* 避障航点采样",
             }
-        self._get_coordinator().clear_grid_layer(SURVEY_LAYER_INDEX)
+        coordinator = self._get_coordinator()
+        begin_layer_survey = getattr(coordinator, "begin_layer_survey", None)
+        if callable(begin_layer_survey):
+            begin_layer_survey(SURVEY_LAYER_INDEX)
+        else:
+            coordinator.clear_grid_layer(SURVEY_LAYER_INDEX)
         self._future = self._executor.submit(self._run, campaign_id, survey_route)
         return self.snapshot()
 

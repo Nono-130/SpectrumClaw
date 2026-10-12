@@ -249,6 +249,101 @@ def test_clearing_a_layer_rejects_an_inflight_result_from_the_previous_campaign(
         executor.shutdown(wait=True)
 
 
+def test_single_layer_survey_clears_other_layers_and_ignores_ascent_and_descent():
+    from backend.skills.uav_spectrum_sim.realtime_grid import RealtimeSpectrumGrid
+    from backend.skills.uav_spectrum_sim.sionna_measurement import RealtimeSionnaCoordinator
+
+    measured_positions = []
+
+    class Runner:
+        def measure(self, *, run_id, position_m, timestamp):
+            measured_positions.append(list(position_m))
+            return {
+                "kind": "spectrum_observation",
+                "source": "sionna_rt",
+                "profile_id": "sionna_urban_2_4ghz",
+                "timestamp": timestamp,
+                "position_m": list(position_m),
+                "anchors": [{"id": "tx-01", "received_power_dbm": -45.0}],
+            }
+
+    coordinator = RealtimeSionnaCoordinator(
+        runner=Runner(),
+        executor=_ImmediateExecutor(),
+        spectrum_grid=RealtimeSpectrumGrid(area_size_m=12.0, cell_size_m=4.0, layer_step_m=5.0),
+        time_fn=lambda: 100.0,
+    )
+    coordinator.observe_pose([0.0, 0.0, 3.0])
+    coordinator.observe_pose([0.0, 0.0, 18.0])
+    assert coordinator.grid_snapshot(layer_index=0)["observed_cells"] > 0
+    assert coordinator.grid_snapshot(layer_index=3)["observed_cells"] > 0
+
+    coordinator.begin_layer_survey(4)
+    measured_positions.clear()
+    assert coordinator.snapshot(_live_runtime([0.0, 0.0, 21.0]))["measurement_track"] == []
+    assert coordinator.observe_pose([0.0, 0.0, 19.9]) is False
+    assert coordinator.observe_pose([0.0, 0.0, 21.0]) is True
+    coordinator.observe_pose([4.0, 0.0, 21.0])
+    assert coordinator.observe_pose([4.0, 0.0, 19.9]) is False
+    coordinator.observe_pose([-4.0, 0.0, 21.0])
+
+    for layer in (0, 1, 2, 3, 5):
+        assert coordinator.grid_snapshot(layer_index=layer)["observed_cells"] == 0
+    assert coordinator.grid_snapshot(layer_index=4)["observed_cells"] > 0
+    assert all(20.0 <= position[2] < 25.0 for position in measured_positions)
+    assert coordinator.snapshot(_live_runtime([0.0, 0.0, 21.0]))["collection_layer_index"] == 4
+    with pytest.raises(ValueError, match="Z4"):
+        coordinator.ingest_observation({
+            "kind": "spectrum_observation",
+            "source": "sionna_rt",
+            "profile_id": "sionna_urban_2_4ghz",
+            "timestamp": 101.0,
+            "position_m": [0.0, 0.0, 19.9],
+            "anchors": [{"id": "tx-01", "received_power_dbm": -45.0}],
+        })
+
+
+def test_single_layer_survey_discards_an_inflight_lower_layer_measurement():
+    from backend.skills.uav_spectrum_sim.realtime_grid import RealtimeSpectrumGrid
+    from backend.skills.uav_spectrum_sim.sionna_measurement import RealtimeSionnaCoordinator
+
+    started = threading.Event()
+    release = threading.Event()
+
+    class BlockingRunner:
+        def measure(self, *, run_id, position_m, timestamp):
+            started.set()
+            assert release.wait(timeout=2.0)
+            return {
+                "kind": "spectrum_observation",
+                "source": "sionna_rt",
+                "profile_id": "sionna_urban_2_4ghz",
+                "timestamp": timestamp,
+                "position_m": list(position_m),
+                "anchors": [{"id": "tx-01", "received_power_dbm": -45.0}],
+            }
+
+    executor = ThreadPoolExecutor(max_workers=1)
+    coordinator = RealtimeSionnaCoordinator(
+        runner=BlockingRunner(),
+        executor=executor,
+        spectrum_grid=RealtimeSpectrumGrid(area_size_m=12.0, cell_size_m=4.0, layer_step_m=5.0),
+        time_fn=lambda: 100.0,
+    )
+    try:
+        coordinator.observe_pose([0.0, 0.0, 3.0])
+        assert started.wait(timeout=2.0)
+        coordinator.begin_layer_survey(4)
+        coordinator.observe_pose([0.0, 0.0, 21.0])
+        release.set()
+        coordinator._future.result(timeout=2.0)
+        assert coordinator.grid_snapshot(layer_index=0)["observed_cells"] == 0
+        assert coordinator.grid_snapshot(layer_index=4)["observed_cells"] == 1
+    finally:
+        release.set()
+        executor.shutdown(wait=True)
+
+
 def test_direct_refresh_rejects_a_result_captured_before_the_layer_generation_changed():
     from backend.skills.uav_spectrum_sim.realtime_grid import RealtimeSpectrumGrid
     from backend.skills.uav_spectrum_sim.sionna_measurement import RealtimeSionnaCoordinator

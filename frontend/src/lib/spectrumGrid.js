@@ -5,6 +5,8 @@ const COLOR_STOPS = [
   [236, 184, 68],
   [235, 80, 57],
 ];
+const TOTAL_POWER_RANGE = Object.freeze({ min: -65, max: -20, dynamic: false });
+const SOURCE_POWER_RANGE = Object.freeze({ min: -80, max: -25, dynamic: false });
 
 
 function replaceMatrixCell(matrix, row, column, value) {
@@ -16,7 +18,7 @@ function replaceMatrixCell(matrix, row, column, value) {
 }
 
 
-function spectrumColorChannels(value, min = -95, max = -30, alpha = 0.92) {
+function spectrumColorChannels(value, min = -65, max = -20, alpha = 0.92) {
   if (!isMeasuredSpectrumValue(value)) return [18, 28, 39, Math.round(Math.min(alpha, 0.16) * 255)];
   const t = Math.max(0, Math.min(1, (Number(value) - min) / Math.max(1e-6, max - min)));
   const scaled = t * (COLOR_STOPS.length - 1);
@@ -44,37 +46,18 @@ export function isMeasuredSpectrumValue(value) {
 }
 
 
-export function spectrumColor(value, min = -95, max = -30, alpha = 0.92) {
+export function spectrumColor(value, min = -65, max = -20, alpha = 0.92) {
   const [red, green, blue, opacity] = spectrumColorChannels(value, min, max, alpha);
   return `rgba(${red}, ${green}, ${blue}, ${opacity / 255})`;
 }
 
 
 export function spectrumColorRange(grid) {
-  const source = displayedSpectrumValues(grid);
-  const values = (Array.isArray(source) ? source.flat() : [])
-    .filter(isMeasuredSpectrumValue)
-    .map(Number)
-    .sort((left, right) => left - right);
-  if (values.length < 2) return { min: -95, max: -30, dynamic: false };
-  const quantile = (ratio) => {
-    const index = (values.length - 1) * ratio;
-    const lower = Math.floor(index);
-    const fraction = index - lower;
-    return values[lower] + (values[Math.min(values.length - 1, lower + 1)] - values[lower]) * fraction;
-  };
-  let min = quantile(0.05) - 1.5;
-  let max = quantile(0.95) + 1.5;
-  if (max - min < 12) {
-    const midpoint = (min + max) / 2;
-    min = midpoint - 6;
-    max = midpoint + 6;
-  }
-  return {
-    min: Math.max(-120, min),
-    max: Math.min(10, max),
-    dynamic: true,
-  };
+  // A fixed scale keeps every cell's color comparable as the original
+  // reconstruction adds measurements and refits the source positions.
+  return grid?.transmitter_id && grid.transmitter_id !== "all"
+    ? SOURCE_POWER_RANGE
+    : TOTAL_POWER_RANGE;
 }
 
 
@@ -93,7 +76,7 @@ export function spectrumGridCells(grid) {
 }
 
 
-export function spectrumGridRaster(grid, colorRange = { min: -95, max: -30 }) {
+export function spectrumGridRaster(grid, colorRange = TOTAL_POWER_RANGE) {
   const values = displayedSpectrumValues(grid);
   const observedMask = Array.isArray(grid?.observed_mask) ? grid.observed_mask : [];
   const declaredRows = Number(grid?.shape?.[0]);
@@ -111,8 +94,8 @@ export function spectrumGridRaster(grid, colorRange = { min: -95, max: -30 }) {
       const valid = isMeasuredSpectrumValue(value);
       const channels = spectrumColorChannels(
         value,
-        Number(colorRange?.min ?? -95),
-        Number(colorRange?.max ?? -30),
+        Number(colorRange?.min ?? TOTAL_POWER_RANGE.min),
+        Number(colorRange?.max ?? TOTAL_POWER_RANGE.max),
         valid ? measured ? 0.96 : 0.84 : 0.16,
       );
       pixels.set(channels, (row * columns + column) * 4);

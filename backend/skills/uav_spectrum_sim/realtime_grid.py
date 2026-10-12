@@ -64,6 +64,16 @@ class RealtimeSpectrumGrid:
             self._layer_revisions[selected_layer] = self._layer_revisions.get(selected_layer, 0) + 1
             self._invalidate_snapshot_cache_locked(selected_layer)
 
+    def clear_all_layers(self) -> None:
+        """Start a single-layer campaign without retaining opportunistic samples."""
+        with self._lock:
+            for layer_index in set(self._layers) | set(self._layer_revisions):
+                self._layer_revisions[layer_index] = self._layer_revisions.get(layer_index, 0) + 1
+            self._layers.clear()
+            self._layer_sample_counts.clear()
+            self._transmitters.clear()
+            self._snapshot_cache.clear()
+
     def _invalidate_snapshot_cache_locked(self, layer_index: int) -> None:
         stale_keys = [key for key in self._snapshot_cache if key[0] == layer_index]
         for key in stale_keys:
