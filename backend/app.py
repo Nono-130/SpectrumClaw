@@ -24,6 +24,7 @@ from .api.uav_agent import router as uav_agent_router
 from .api.eval_endpoints import router as eval_router
 from .api.frequency_planning import router as frequency_planning_router
 from .api.system import router as system_router
+from .api.wireless_recognition import router as wireless_recognition_router
 from .config import get_settings
 from .tools.registry import register_all
 from .runtime.resident_state import get_resident_state
@@ -71,6 +72,9 @@ def _register_frontend(app: FastAPI) -> None:
 def create_app() -> FastAPI:
     app = FastAPI(title="SpectrumClaw API")
 
+    from .api.wireless_upload_limit import WirelessUploadLimitMiddleware
+    app.add_middleware(WirelessUploadLimitMiddleware, max_file_bytes=get_settings().wireless_max_file_bytes)
+
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["*"],
@@ -89,6 +93,7 @@ def create_app() -> FastAPI:
     app.include_router(eval_router)
     app.include_router(frequency_planning_router)
     app.include_router(system_router)
+    app.include_router(wireless_recognition_router)
 
     # register built-in tools
     register_all()
@@ -106,6 +111,21 @@ def create_app() -> FastAPI:
                 "model": provider.model if provider.configured else "",
             },
         }
+
+    @app.on_event("startup")
+    async def _start_wireless_ingestion():
+        from .skills.wireless_recognition.service import get_wireless_service
+        service = get_wireless_service()
+        app.state.wireless_service = service
+        if get_settings().wireless_watch_enabled:
+            service.start()
+
+    @app.on_event("shutdown")
+    async def _stop_wireless_ingestion():
+        import asyncio
+        service = getattr(app.state, "wireless_service", None)
+        if service is not None:
+            await asyncio.to_thread(service.stop)
 
     @app.on_event("startup")
     async def _warmup():

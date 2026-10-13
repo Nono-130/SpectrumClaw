@@ -10,6 +10,7 @@ const KnowledgePage = lazy(() => import("./pages/KnowledgePage.jsx"));
 const MemoryPage = lazy(() => import("./pages/MemoryPage.jsx"));
 const SystemPage = lazy(() => import("./pages/SystemPage.jsx"));
 const UavSpectrumSimPage = lazy(() => import("./pages/UavSpectrumSimPage.jsx"));
+const WirelessRecognitionPage = lazy(() => import("./pages/WirelessRecognitionPage.jsx"));
 
 const crumbMap = {
   console: ["SpectrumClaw", "Workspace", "Console"],
@@ -18,6 +19,7 @@ const crumbMap = {
   situation_building: ["SpectrumClaw", "Skills", "Spectrum Construction"],
   resource_allocation: ["SpectrumClaw", "Skills", "Resource Allocation"],
   spectrum_decision: ["SpectrumClaw", "Skills", "Spectrum Decision"],
+  wireless_recognition: ["SpectrumClaw", "Skills", "Wireless Recognition"],
   knowledge: ["SpectrumClaw", "System", "Knowledge Base"],
   memory: ["SpectrumClaw", "System", "Memory & Evolution"],
   system: ["SpectrumClaw", "System", "Status"]
@@ -29,6 +31,7 @@ const pageMetaMap = {
   frequency_planning: { kicker: "Skill · Frequency Planning", title: "频率规划工作区", description: "ITU 知识检索与可引用频段方案" },
   situation_building: { kicker: "Skill · Spectrum Construction", title: "频谱构建工作区", description: "多分辨率构建、UAV REM 与算法对比" },
   spectrum_decision: { kicker: "Skill · Spectrum Decision", title: "频谱决策 · 资源分配", description: "多用户业务切片与约束优化" },
+  wireless_recognition: { kicker: "Live Signals · Wireless Recognition", title: "无线协议识别", description: "真实采集记录、频谱选区与协议识别" },
   knowledge: { kicker: "System · Knowledge Base", title: "频谱知识库", description: "文档、混合检索与知识图谱" },
   memory: { kicker: "System · Memory & Evolution", title: "记忆与进化", description: "对话历史、知识沉淀与进化报告" },
   system: { kicker: "System · Runtime Status", title: "运行系统状态", description: "后端、模型、RAG 与技能健康检查" },
@@ -40,6 +43,7 @@ export const PAGE_IDS = [
   "frequency_planning",
   "situation_building",
   "spectrum_decision",
+  "wireless_recognition",
   "resource_allocation",
   "knowledge",
   "memory",
@@ -140,6 +144,7 @@ export default function App() {
     frequency_planning: <FrequencyPlanningPage active={activeId === "frequency_planning"} onBack={() => navigate("console")} />,
     situation_building: <SituationBuildingPage active={activeId === "situation_building"} onBack={() => navigate("console")} />,
     spectrum_decision: <SpectrumDecisionPage active={activeId === "spectrum_decision"} onBack={() => navigate("console")} />,
+    wireless_recognition: <WirelessRecognitionPage active={activeId === "wireless_recognition"} onBack={() => navigate("console")} />,
     knowledge: <KnowledgePage active={activeId === "knowledge"} />,
     memory: <MemoryPage active={activeId === "memory"} />,
     system: <SystemPage active={activeId === "system"} />,

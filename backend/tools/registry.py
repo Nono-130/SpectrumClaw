@@ -312,6 +312,16 @@ def register_all():
         if name not in TOOL_REGISTRY:
             register(name, handler, description, parameters, category, **kwargs)
 
+    from .wireless import WIRELESS_TOOLS
+    for tool in WIRELESS_TOOLS:
+        is_analysis = tool["name"] == "analyze_wireless_record"
+        built_in(
+            tool["name"], tool["handler"], tool["description"], tool["parameters"], "wireless",
+            # Analysis persists its result and may load the model on its first call.
+            read_only=not is_analysis,
+            timeout_s=120.0 if is_analysis else 30.0,
+        )
+
     built_in("get_time", _get_current_time, "获取当前 UTC 时间和北京时间",
              {"type": "object", "properties": {}}, "time")
     built_in("get_system_status", _get_system_status, "获取 SpectrumClaw 系统各组件的运行状态",
